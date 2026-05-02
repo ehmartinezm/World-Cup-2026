@@ -556,13 +556,17 @@ def translate():
     target = body.get('target', 'en')
     if not q: return ok({'translatedText': ''})
     try:
-        resp = requests.post(
-            LIBRETRANSLATE_URL,
-            json={'q': q, 'source': source, 'target': target, 'format': 'text'},
-            timeout=8
-        )
-        resp.raise_for_status()
+    resp = requests.post(
+        LIBRETRANSLATE_URL,
+        json={'q': q, 'source': source, 'target': target, 'format': 'text'},
+        timeout=3
+    )
+    if resp.ok:
         return ok({'translatedText': resp.json().get('translatedText', q)})
+except:
+    pass
+
+return ok({'translatedText': q})
     except Exception:
         return ok({'translatedText': q})   # silently fall back to original
 
