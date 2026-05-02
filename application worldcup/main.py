@@ -554,22 +554,22 @@ def translate():
     q      = body.get('q', '')
     source = body.get('source', 'es')
     target = body.get('target', 'en')
-    if not q: return ok({'translatedText': ''})
-    try:
-   try:
-    resp = requests.post(
-        LIBRETRANSLATE_URL,
-        json={'q': q, 'source': source, 'target': target, 'format': 'text'},
-        timeout=3
-    )
-    if resp.ok:
-        return ok({'translatedText': resp.json().get('translatedText', q)})
-except:
-    pass
 
-return ok({'translatedText': q})
+    if not q:
+        return ok({'translatedText': ''})
+
+    try:
+        resp = requests.post(
+            LIBRETRANSLATE_URL,
+            json={'q': q, 'source': source, 'target': target, 'format': 'text'},
+            timeout=3
+        )
+        if resp.ok:
+            return ok({'translatedText': resp.json().get('translatedText', q)})
     except Exception:
-        return ok({'translatedText': q})   # silently fall back to original
+        pass
+
+    return ok({'translatedText': q})   # silently fall back to original
 
 
 # ─── Arranque ─────────────────────────────────────────────────────────────────
