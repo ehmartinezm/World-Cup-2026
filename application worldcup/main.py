@@ -161,8 +161,14 @@ def require_auth(f):
     return decorated
 
 def verify_admin():
-    pw = request.headers.get('X-Admin-Pass') or (request.get_json(force=True) or {}).get('adminPass','')
-    return pw == GLOBAL_ADMIN_PASS
+    # Accept password from header (preferred) or JSON body field
+    pw = (request.headers.get('X-Admin-Pass') or '').strip()
+    if not pw:
+        try:
+            pw = (request.get_json(force=True, silent=True) or {}).get('adminPass','')
+        except Exception:
+            pw = ''
+    return pw.strip() == GLOBAL_ADMIN_PASS
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -503,8 +509,9 @@ def save_results():
                 home_score=excluded.home_score,away_score=excluded.away_score,
                 home_team=excluded.home_team,away_team=excluded.away_team,updated_at=excluded.updated_at
         """, (mid, mtyp, int(h), int(a), ht, at, now_iso()))
-    db.commit()
-    return ok()
+    if matches:
+        db.commit()
+    return ok({'saved': len([m for m in matches if m.get('matchId')])})
 
 
 @app.route('/api/results', methods=['DELETE'])
