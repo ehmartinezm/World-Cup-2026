@@ -703,7 +703,13 @@ const TRANSLATIONS = {
     gameDeleted:'Partida eliminada',
     gameCreated:'¡Partida creada! Comparte el link de invitación.',
     enterPredictionsToSeeStandings:'Ingresa pronósticos para ver la tabla',
-    bracketFromPredictions:'según tus pronósticos',
+    bracketFromPredictions:'Los equipos sugeridos automáticamente según tus pronósticos. Puedes cambiarlos manualmente.',
+    adminVerifying:'Verificando contraseña...', savedResults:'resultados guardados',
+    noResultsToSave:'No hay resultados para guardar', unlockedForEdit:'Resultados desbloqueados para corrección',
+    confirmCorrect:'¿Corregir resultados del', confirmSubmitGroups:'¿Enviar pronósticos de grupos? No podrán modificarse.',
+    missingPredictions:'pronóstico(s) por completar', lockedByJornada2:'partido(s) ya bloqueados por jornada',
+    onlyOwnPredictions:'Solo puedes guardar tus propios pronósticos',
+    groupsAlreadySubmitted:'Ya enviaste tus pronósticos de grupos',
   },
   fr: {
     navHome:'Accueil', navPartidas:'Parties', navPredictions:'Pronostics',
@@ -763,7 +769,13 @@ const TRANSLATIONS = {
     confirmDeleteGame:'Supprimer cette partie et toutes ses données?',
     gameDeleted:'Partie supprimée', gameCreated:'Partie créée! Partagez le lien.',
     enterPredictionsToSeeStandings:'Entrez des pronostics pour voir le classement',
-    bracketFromPredictions:'selon vos pronostics',
+    bracketFromPredictions:'Équipes suggérées automatiquement selon vos pronostics. Vous pouvez les modifier.',
+    adminVerifying:'Vérification...', savedResults:'résultats sauvegardés',
+    noResultsToSave:'Aucun résultat à sauvegarder', unlockedForEdit:'Résultats débloqués pour correction',
+    confirmCorrect:'Corriger les résultats du', confirmSubmitGroups:'Soumettre les pronostics? Ils ne pourront plus être modifiés.',
+    missingPredictions:'pronostic(s) manquants', lockedByJornada2:'match(s) déjà bloqués',
+    onlyOwnPredictions:'Vous ne pouvez sauvegarder que vos propres pronostics',
+    groupsAlreadySubmitted:'Vous avez déjà soumis vos pronostics de groupes',
   },
   en: {
     navHome:'Home', navPartidas:'Games', navPredictions:'Predictions',
@@ -823,7 +835,13 @@ const TRANSLATIONS = {
     confirmDeleteGame:'Delete this game and all its data?',
     gameDeleted:'Game deleted', gameCreated:'Game created! Share the invitation link.',
     enterPredictionsToSeeStandings:'Enter predictions to see standings',
-    bracketFromPredictions:'based on your predictions',
+    bracketFromPredictions:'Teams suggested automatically based on your predictions. You can change them manually.',
+    adminVerifying:'Verifying...', savedResults:'results saved',
+    noResultsToSave:'No results to save', unlockedForEdit:'Results unlocked for editing',
+    confirmCorrect:'Correct results for', confirmSubmitGroups:'Submit group predictions? They cannot be changed after.',
+    missingPredictions:'prediction(s) missing', lockedByJornada2:'match(s) already locked by matchday',
+    onlyOwnPredictions:'You can only save your own predictions',
+    groupsAlreadySubmitted:'You already submitted your group predictions',
   }
 };
 
@@ -894,13 +912,29 @@ Object.keys(NEW_T_KEYS).forEach(lang=>{
 function setLanguage(lang){
   currentLang=lang;
   document.querySelectorAll('.lang-btn').forEach(b=>{b.classList.toggle('active',b.dataset.lang===lang)});
+
   const renders={home:renderHome,partidas:renderPartidas,predictions:renderPredictions,
                  results:renderResults,standings:renderStandings,rules:renderRules,admin:renderAdmin};
   const fn=renders[currentView];
+
+  // Show subtle loading indicator on the active lang button
+  const activeBtn=document.querySelector(`.lang-btn[data-lang="${lang}"]`);
+  const origText=activeBtn?.innerHTML;
+  if(activeBtn&&lang!=='es') activeBtn.style.opacity='0.5';
+
+  const afterRender=async()=>{
+    translateNavbar(lang);
+    if(lang!=='es'){
+      await translatePage(lang);
+      if(activeBtn){ activeBtn.style.opacity=''; }
+    }
+  };
+
   if(fn){
     const result=fn();
-    const afterRender=()=>{ if(lang!=='es') setTimeout(()=>translatePage(lang),100); };
     result instanceof Promise ? result.then(afterRender) : afterRender();
+  } else {
+    afterRender();
   }
 }
 
@@ -995,6 +1029,21 @@ const apiGet  = p      => apiFetch(p);
 const apiPost = (p,b)  => apiFetch(p,{method:'POST',  body:JSON.stringify(b)});
 const apiDel  = (p,b={})=> apiFetch(p,{method:'DELETE',body:JSON.stringify(b)});
 
+// Admin API: injects X-Admin-Pass header (password never stored in source)
+let adminPass='';
+async function apiFetchAdmin(path, options={}){
+  const headers={'Content-Type':'application/json','X-Admin-Pass':adminPass};
+  if(authToken) headers['X-Token']=authToken;
+  try{
+    const res=await fetch(path,{headers,...options});
+    const json=await res.json();
+    if(!json.ok) throw new Error(json.error||'Error del servidor');
+    return json.data!==undefined?json.data:json;
+  } catch(e){ console.error('Admin API:',path,e.message); throw e; }
+}
+const apiAdminPost = (p,b)    => apiFetchAdmin(p,{method:'POST',  body:JSON.stringify(b)});
+const apiAdminDel  = (p,b={}) => apiFetchAdmin(p,{method:'DELETE',body:JSON.stringify(b)});
+
 function defaultData(){ return {games:[],globalResults:{groupMatches:{},knockoutMatches:{}}}; }
 
 async function loadData(){
@@ -1033,7 +1082,7 @@ function getResults(){ return appData?.globalResults||{groupMatches:{},knockoutM
 function getPredictions(){ const g=currentGame(); if(!g||!currentParticipant) return {}; const c=g.predictionsCache?.[currentParticipant]; return c?{[currentParticipant]:c}:{}; }
 
 function renderMemberList(members, gameId){
-  if(!members.length) return `<div class="empty-state" style="padding:0.5rem 0">Sin participantes</div>`;
+  if(!members.length) return `<div class="empty-state" style="padding:0.5rem 0">${t('noParticipants')}</div>`;
   const game=appData.games.find(g=>g.id===gameId);
   const amOwner=game?.isOwner||false;
   return `<ul class="participant-list">${members.map(m=>{
@@ -1110,39 +1159,116 @@ async function doAuth(){
 }
 
 // ── TRANSLATION ENGINE ────────────────────────────────────────────────
+// LibreTranslate via /api/translate (proxy Flask)
+// Strategy:
+//   1. All static UI strings use t() with manual translations (ES/FR/EN) — instant.
+//   2. Dynamic content that can't easily use t() is handled by translatePage().
+//   3. translatePage() always translates FROM Spanish (source of truth).
+//   4. Results are cached in-memory — switching back to a language is instant.
+
 const LANG_CODES={es:'es',fr:'fr',en:'en'};
-const translateCache={};
+const translateCache={};  // key: "lt:original" → translated
+let _translateBusy=false;
+
+// Nodes to skip during translation scan
+const SKIP_TAGS=new Set(['SCRIPT','STYLE','NOSCRIPT','INPUT','TEXTAREA','SELECT',
+  'OPTION','CODE','PRE','IMG','SVG','PATH','BUTTON','A','NAV','HEADER','FOOTER']);
+
+// Strings that should never be sent to the translation API
+function _skipString(s){
+  if(!s||s.length<2) return true;
+  if(/^[\d\s\+\-\:\/\.\,\%\#\!\?\(\)\[\]]+$/.test(s)) return true;  // numbers/punctuation only
+  if(/^[A-Z]{2,4}$/.test(s)) return true;   // team codes, lang codes
+  if(/^\d+$/.test(s)) return true;
+  if(s.length>300) return true;              // very long blocks → skip
+  return false;
+}
+
+// Strip leading/trailing emoji for cleaner translation, re-attach after
+function _splitEmoji(s){
+  const m=s.match(/^([\p{Emoji}\s]*)(.+?)([\p{Emoji}\s]*)$/u);
+  if(m&&(m[1]||m[3])) return {pre:m[1],core:m[2].trim(),suf:m[3]};
+  return {pre:'',core:s,suf:''};
+}
 
 async function translatePage(targetLang){
   if(targetLang==='es') return;
-  const lt=LANG_CODES[targetLang]; if(!lt) return;
+  const lt=LANG_CODES[targetLang]; if(!lt||lt==='es') return;
+  if(_translateBusy) return;
+  _translateBusy=true;
+
   const container=document.querySelector('main')||document.body;
+
+  // Collect all visible text nodes inside <main>
   const walker=document.createTreeWalker(container,NodeFilter.SHOW_TEXT,{
     acceptNode:n=>{
       const p=n.parentElement;
-      if(!p||['SCRIPT','STYLE','NOSCRIPT','INPUT','TEXTAREA','SELECT','OPTION'].includes(p.tagName))
-        return NodeFilter.FILTER_REJECT;
+      if(!p) return NodeFilter.FILTER_REJECT;
+      // Walk up to check ancestors
+      let el=p;
+      while(el&&el!==container){
+        if(SKIP_TAGS.has(el.tagName)) return NodeFilter.FILTER_REJECT;
+        el=el.parentElement;
+      }
       const txt=n.textContent.trim();
-      if(!txt||txt.length<2||/^\d+$/.test(txt)) return NodeFilter.FILTER_SKIP;
+      if(_skipString(txt)) return NodeFilter.FILTER_SKIP;
       return NodeFilter.FILTER_ACCEPT;
     }
   });
-  const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
-  const unique=[...new Set(nodes.map(n=>n.textContent.trim()).filter(s=>s.length>1))];
-  const uncached=unique.filter(s=>!translateCache[`${lt}:${s}`]);
-  for(let i=0;i<uncached.length;i+=10){
-    const batch=uncached.slice(i,i+10);
+
+  const nodes=[];
+  while(walker.nextNode()) nodes.push(walker.currentNode);
+
+  // Collect unique translatable strings (cleaned)
+  const seen=new Map(); // core → [node, pre, suf]
+  nodes.forEach(node=>{
+    const raw=node.textContent.trim();
+    const {pre,core,suf}=_splitEmoji(raw);
+    if(_skipString(core)) return;
+    if(!seen.has(core)) seen.set(core,[]);
+    seen.get(core).push({node,pre,suf,raw});
+  });
+
+  const cores=[...seen.keys()];
+  const uncached=cores.filter(s=>!translateCache[`${lt}:${s}`]);
+
+  // Translate in batches of 20 (LibreTranslate free tier is generous)
+  const BATCH=20;
+  for(let i=0;i<uncached.length;i+=BATCH){
+    const batch=uncached.slice(i,i+BATCH);
     await Promise.allSettled(batch.map(async q=>{
       try{
         const d=await apiPost('/api/translate',{q,source:'es',target:lt});
-        translateCache[`${lt}:${q}`]=d.translatedText||q;
-      }catch(e){ translateCache[`${lt}:${q}`]=q; }
+        const translated=(d.translatedText||q).trim();
+        translateCache[`${lt}:${q}`]=translated!==q?translated:q;
+      }catch(e){
+        translateCache[`${lt}:${q}`]=q; // fallback: keep original
+      }
     }));
   }
-  nodes.forEach(node=>{
-    const orig=node.textContent.trim();
-    const trans=translateCache[`${lt}:${orig}`];
-    if(trans&&trans!==orig) node.textContent=node.textContent.replace(orig,trans);
+
+  // Apply translations back to DOM nodes
+  seen.forEach((entries,core)=>{
+    const translated=translateCache[`${lt}:${core}`]||core;
+    if(translated===core) return; // nothing changed
+    entries.forEach(({node,pre,suf,raw})=>{
+      // Replace only the core part, keep surrounding whitespace/emoji
+      node.textContent=node.textContent.replace(raw,pre+translated+suf);
+    });
+  });
+
+  _translateBusy=false;
+}
+
+// Also translate the navbar static elements (outside <main>)
+async function translateNavbar(targetLang){
+  if(targetLang==='es') return;
+  const lt=LANG_CODES[targetLang]; if(!lt||lt==='es') return;
+  // Navbar uses data-i18n spans — update them via t()
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const key=el.dataset.i18n;
+    const val=t(key);
+    if(val&&val!==key) el.textContent=val;
   });
 }
 
@@ -1474,7 +1600,7 @@ function renderHome(){
       </div>
       <div style="font-size:0.82rem;color:var(--gray-400);padding:0 1.25rem 0.5rem">
         Código: <strong style="color:var(--white);font-family:monospace;font-size:1rem;letter-spacing:2px">${game.code}</strong>
-        · ${members.length} participante(s)
+        · ${members.length} ${t('gameParticipants')}
       </div>
       <div style="display:flex;gap:0.5rem;padding:0 1.25rem 1rem;flex-wrap:wrap">
         ${game.isOwner?`<button class="btn btn-sm btn-outline" onclick="showInviteModal('${game.id}')">📨 ${t('inviteParticipants')}</button>`:''}
@@ -1569,7 +1695,7 @@ function renderPartidas(){
         <div style="text-align:center;padding:0.75rem 0">
           <div style="font-size:2rem;margin-bottom:0.4rem">🏆</div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1rem;letter-spacing:1px;color:var(--green-light)">${t('createGame')}</div>
-          <div style="font-size:0.78rem;color:var(--gray-400);margin-top:0.25rem">Crea tu quiniela y comparte el link</div>
+          <div style="font-size:0.78rem;color:var(--gray-400);margin-top:0.25rem">${t('step1')}</div>
         </div>
       </div>
     </div>
@@ -1606,7 +1732,7 @@ function renderGameCard(g){
           <div class="partida-title">${g.name}</div>
           <div class="partida-meta" style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.3rem">
             ${typeLabel}
-            <span>Código: <span style="font-family:monospace;font-size:0.88rem;letter-spacing:2px;color:var(--gold)">${g.code}</span></span>
+            <span>${t("gameCode")}: <span style="font-family:monospace;font-size:0.88rem;letter-spacing:2px;color:var(--gold)">${g.code}</span></span>
             ${!g.isOwner?`<span style="color:var(--gray-400)">👑 ${ownerName}</span>`:''}
           </div>
         </div>
@@ -1617,8 +1743,8 @@ function renderGameCard(g){
       </div>
       <div class="partida-actions">
         ${isActive
-          ? `<span class="pts-badge exact" style="padding:0.3rem 0.75rem">✓ Activa</span>`
-          : `<button class="btn btn-sm btn-primary" onclick="setActiveGame('${g.id}')">▶ Activar</button>`}
+          ? `<span class="pts-badge exact" style="padding:0.3rem 0.75rem">✓ ${t("openGame")}</span>`
+          : `<button class="btn btn-sm btn-primary" onclick="setActiveGame('${g.id}')">▶ ${t("openGame")}</button>`}
         ${g.isOwner?`<button class="btn btn-sm btn-outline" onclick="showInviteModal('${g.id}')">📨 ${t('inviteParticipants')}</button>`:''}
         ${g.isOwner?`<button class="btn btn-sm btn-danger" onclick="deleteGame('${g.id}')">🗑</button>`:''}
         <button class="btn btn-sm btn-outline" onclick="setActiveGame('${g.id}');showView('predictions')">⚽ ${t('editPredictions')}</button>
@@ -1686,7 +1812,7 @@ function showCreateGameModal(){
 async function createGame(){
   const nameEl=document.getElementById('game-name-input');
   const name=nameEl?.value.trim();
-  if(!name){showToast('Ingresa un nombre para la partida','error');return;}
+  if(!name){showToast(t('gameName')+' ?','error');return;}
   const typeEl=document.querySelector('input[name="game-type"]:checked');
   const gameType=typeEl?.value||'A';
   try{
@@ -1772,10 +1898,10 @@ function showInviteModal(gameId){
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <p style="font-size:0.85rem;color:var(--gray-400);margin-bottom:1rem">Comparte este link o código para que tus amigos se unan a <strong style="color:var(--white)">${game.name}</strong></p>
+      <p style="font-size:0.85rem;color:var(--gray-400);margin-bottom:1rem">${t("joinGameDesc")} — <strong style="color:var(--white)">${game.name}</strong></p>
 
       <div style="text-align:center;margin-bottom:1.25rem">
-        <div style="font-size:0.75rem;color:var(--gray-400);margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:1px">Código de partida</div>
+        <div style="font-size:0.75rem;color:var(--gray-400);margin-bottom:0.4rem;text-transform:uppercase;letter-spacing:1px">${t("gameCode")}</div>
         <div style="font-family:monospace;font-size:2.5rem;font-weight:900;letter-spacing:8px;color:var(--gold);background:rgba(245,158,11,0.08);border:2px solid rgba(245,158,11,0.25);border-radius:12px;padding:0.5rem 1rem">${game.code}</div>
       </div>
 
@@ -1797,7 +1923,7 @@ function showInviteModal(gameId){
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-primary" onclick="closeModal()">Listo</button>
+      <button class="btn btn-primary" onclick="closeModal()">✓ ${t("add")}</button>
     </div>
   `);
 }
@@ -1861,7 +1987,7 @@ async function renderPredictions(){
   // Load predictions if not cached
   if(!game.predictionsCache) game.predictionsCache={};
   if(!game.predictionsCache[currentParticipant]){
-    container.innerHTML=`<div style="text-align:center;padding:3rem;color:var(--gray-400)">⏳ Cargando pronósticos...</div>`;
+    container.innerHTML=`<div style="text-align:center;padding:3rem;color:var(--gray-400)">⏳ ${t('navPredictions')}...</div>`;
     await loadUserPredictions(currentGameId, currentParticipant);
   }
   const predData = game.predictionsCache[currentParticipant]||{groupMatches:{},knockoutMatches:{},groupsSubmitted:false};
@@ -1877,6 +2003,19 @@ async function renderPredictions(){
 
   const viewingName = members.find(m=>m.userId===currentParticipant)?.username||'';
 
+  // Progress counters
+  const filledGroup=Object.keys(predData.groupMatches||{}).filter(k=>{
+    const v=predData.groupMatches[k]; return v&&v.home!==''&&v.home!=null&&v.away!==''&&v.away!=null;
+  }).length;
+  const totalGroup=GROUP_MATCHES.length;
+  const pctGroup=Math.round(filledGroup/totalGroup*100);
+
+  const typeLabel=gameType==='B'
+    ?`<span style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);font-size:0.68rem;font-weight:700;letter-spacing:1px;padding:0.15rem 0.6rem;border-radius:8px">📅 ${t('typeBGame')}</span>`
+    :`<span style="background:rgba(245,158,11,0.12);color:var(--gold);border:1px solid rgba(245,158,11,0.25);font-size:0.68rem;font-weight:700;letter-spacing:1px;padding:0.15rem 0.6rem;border-radius:8px">📋 ${t('typeAGame')}</span>`;
+
+  const koTabDisabled=gameType==='A'&&!isSubmitted&&viewingOwnPredictions;
+
   container.innerHTML=`
     <div class="section-header">
       <h2>⚽ ${t('navPredictions')}</h2>
@@ -1888,29 +2027,38 @@ async function renderPredictions(){
       </div>
     </div>
 
+    <!-- Type + status bar -->
+    <div style="display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-bottom:0.85rem">
+      ${typeLabel}
+      ${gameType==='A'
+        ?`<span class="pts-badge ${isSubmitted?'exact':'wrong'}" style="font-size:0.72rem;padding:0.2rem 0.7rem">
+            ${isSubmitted?'🔒 '+t('groupsSubmitted'):'⏳ '+t('groupsNotSubmitted')}
+           </span>`
+        :`<span style="font-size:0.75rem;color:#60a5fa">🔒 ${t('typeBDesc')}</span>`}
+    </div>
+
+    <!-- Progress bar (group stage) -->
+    <div style="margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--gray-400);margin-bottom:0.25rem">
+        <span>${t('groupStage')}: ${filledGroup}/${totalGroup}</span>
+        <span>${pctGroup}%</span>
+      </div>
+      <div style="height:4px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pctGroup}%;background:linear-gradient(90deg,var(--green-field),var(--green-light));border-radius:4px;transition:width 0.3s"></div>
+      </div>
+    </div>
+
     ${readonly?`<div style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#60a5fa">
       👁 ${t('viewPredictions')} de <strong>${viewingName}</strong> — ${t('readonly')}
     </div>`:''}
 
-    ${gameType==='A'?`
-      <div style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap">
-        <span class="pts-badge ${isSubmitted?'exact':'wrong'}" style="font-size:0.78rem;padding:0.3rem 0.8rem">
-          ${isSubmitted?'🔒 Grupos enviados':'⏳ Grupos pendientes de enviar'}
-        </span>
-        ${isSubmitted?`<span style="font-size:0.78rem;color:var(--green-light)">✅ Eliminatoria desbloqueada</span>`:''}
-      </div>
-    `:`
-      <div style="background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:0.5rem 0.85rem;margin-bottom:1rem;font-size:0.8rem;color:#60a5fa">
-        📅 <strong>Tipo B</strong> — Se bloquea ${JORNADA_LOCK_HOURS}h antes del primer partido de cada jornada
-      </div>
-    `}
-
     <div class="tabs">
       <button class="tab-btn active" onclick="switchTab('pred','group',this)">⚽ ${t('groupStage')}</button>
-      <button class="tab-btn" onclick="switchTab('pred','knockout',this)"
-        ${gameType==='A'&&!isSubmitted&&viewingOwnPredictions?'disabled':''}
-        style="${gameType==='A'&&!isSubmitted&&viewingOwnPredictions?'opacity:0.4;cursor:not-allowed':''}">
-        🏆 ${t('knockoutStage')}
+      <button class="tab-btn" onclick="${koTabDisabled?'':"switchTab('pred','knockout',this)"}"
+        ${koTabDisabled?'disabled':''}
+        title="${koTabDisabled?t('groupsNotSubmitted'):''}"
+        style="${koTabDisabled?'opacity:0.35;cursor:not-allowed':''}">
+        🏆 ${t('knockoutStage')}${koTabDisabled?' 🔒':''}
       </button>
     </div>
     <div id="pred-tab-group" class="tab-content active">
@@ -1927,34 +2075,7 @@ async function onParticipantSelect(userId){
   await renderPredictions();
 }
 
-function renderPredictionTabs(){
-  const game=currentGame();
-  const predictions=game?.predictions||{};
-  const participant=getParticipants().find(p=>p.id===currentParticipant);
-  if(!participant) return '';
-
-  // Count filled predictions
-  const pred=predictions[currentParticipant]||{groupMatches:{},knockoutMatches:{}};
-  const filled=Object.keys(pred.groupMatches||{}).filter(k=>pred.groupMatches[k].home!==''&&pred.groupMatches[k].home!==undefined).length;
-  const total=GROUP_MATCHES.length;
-  const pct=Math.round(filled/total*100);
-
-  return `
-    <div class="predictions-intro">
-      <div>
-        <strong>${t('predictionsFor')} ${participant.name}</strong>
-        <div class="progress-info">${filled}/${total} partidos de grupos completados</div>
-        <div class="pred-progress" style="width:200px;margin-top:0.4rem"><div class="pred-progress-fill" style="width:${pct}%"></div></div>
-      </div>
-    </div>
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('pred','group',this)">${t('groupStage')}</button>
-      <button class="tab-btn" onclick="switchTab('pred','knockout',this)">${t('knockoutStage')}</button>
-    </div>
-    <div id="pred-tab-group" class="tab-content active">${renderGroupPredictions()}</div>
-    <div id="pred-tab-knockout" class="tab-content">${renderKnockoutPredictions()}</div>
-  `;
-}
+// renderPredictionTabs() removed — replaced by renderPredictions() with proper auth/cache logic
 
 function switchTab(prefix,tab,btn){
   const parent=btn.closest('.view')||document;
@@ -1972,7 +2093,7 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
 
   if(isSubmitted){
     html+=`<div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:0.75rem 1rem;margin-bottom:1rem;font-size:0.85rem;color:var(--green-light)">
-      🔒 Pronósticos de grupos enviados y bloqueados. Ya no pueden ser modificados.
+      🔒 ${t('groupsSubmitted')}
     </div>`;
   }
 
@@ -1999,7 +2120,7 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
               if(!locked && gameType==='B'){
                 if(jornadaLocked[match.date]){
                   locked=true;
-                  jornadaMsg=`<span style="font-size:0.65rem;color:var(--red)">🔒 Bloqueado</span>`;
+                  jornadaMsg=`<span style="font-size:0.65rem;color:var(--red)">${t('lockedByJornada')}</span>`;
                 }
               }
               return renderMatchPredRowLocked(match,p,r,pts,locked,locked?null:group.id)+jornadaMsg;
@@ -2015,12 +2136,13 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
   if(!readonly && !isSubmitted){
     if(gameType==='A'){
       html+=`<div class="save-bar" style="gap:0.75rem">
-        <button class="btn btn-outline btn-lg" onclick="saveGroupPredictions(false)">💾 Guardar borrador</button>
-        <button class="btn btn-gold btn-lg" onclick="saveGroupPredictions(true)">🔒 Enviar pronósticos de grupos</button>
+        <button class="btn btn-outline btn-lg" onclick="saveGroupPredictions(false)">💾 ${t('savePredictions')}</button>
+        <button class="btn btn-gold btn-lg" onclick="saveGroupPredictions(true)">🔒 ${t('submitGroups')}</button>
       </div>`;
     } else {
+      // Type B: save button per group date; this bottom button saves everything not yet locked
       html+=`<div class="save-bar">
-        <button class="btn btn-primary btn-lg" onclick="saveGroupPredictions(false)">💾 Guardar pronósticos</button>
+        <button class="btn btn-primary btn-lg" onclick="saveGroupPredictions(false)">💾 ${t('savePredictions')}</button>
       </div>`;
     }
   }
@@ -2164,11 +2286,11 @@ function renderMatchPredRow(match,pred,result,pts){
 }
 
 async function saveGroupPredictions(submit=false){
-  if(!isLoggedIn()||currentParticipant!==authUserId){showToast('Solo puedes guardar tus propios pronósticos','error');return;}
+  if(!isLoggedIn()||currentParticipant!==authUserId){showToast(t('onlyOwnPredictions'),'error');return;}
   const game=currentGame(); if(!game) return;
 
   const predCache=game.predictionsCache?.[authUserId]||{};
-  if(predCache.groupsSubmitted){showToast('Ya enviaste tus pronósticos de grupos','error');return;}
+  if(predCache.groupsSubmitted){showToast(t('groupsAlreadySubmitted'),'error');return;}
 
   const groupMatches={};
   const matchDates={};
@@ -2183,8 +2305,8 @@ async function saveGroupPredictions(submit=false){
 
   if(submit){
     const missing=GROUP_MATCHES.filter(m=>!groupMatches[m.id]);
-    if(missing.length>0){showToast(`⚠️ Faltan ${missing.length} pronóstico(s) por completar`,'error');return;}
-    if(!confirm('¿Estás seguro de enviar tus pronósticos de grupos? Una vez enviados NO podrán modificarse.')) return;
+    if(missing.length>0){showToast(`⚠️ ${missing.length} ${t('missingPredictions')}`,'error');return;}
+    if(!confirm(t('confirmSubmitGroups'))) return;
   }
 
   try{
@@ -2197,8 +2319,8 @@ async function saveGroupPredictions(submit=false){
       const m=game.members?.find(mb=>mb.userId===authUserId);
       if(m) m.groupsSubmitted=true;
     }
-    if(res.skipped?.length) showToast(`⚠️ ${res.skipped.length} partido(s) ya bloqueados por jornada`,'info');
-    else if(submit) showToast('🔒 Pronósticos de grupos enviados ✓','success');
+    if(res.skipped?.length) showToast(`⚠️ ${res.skipped.length} ${t('lockedByJornada2')}`,'info');
+    else if(submit) showToast(`🔒 ${t('submitGroups')} ✓`,'success');
     else showToast(t('predictionsSaved'),'success');
     await renderPredictions();
   }catch(e){ showToast(e.message||'Error al guardar','error'); }
@@ -2213,8 +2335,8 @@ function renderKnockoutPredictions(predData, readonly=false, isGroupsSubmitted=f
   // Block knockout for Type A if groups not submitted and viewing own predictions
   if(gameType==='A' && !isGroupsSubmitted && !readonly){
     return `<div class="empty-state-card"><div class="empty-icon">🔒</div>
-      <p style="color:var(--gold)">Debes enviar tus pronósticos de grupos primero para acceder a la eliminatoria.</p>
-      <button class="btn btn-gold" onclick="switchTab('pred','group',document.querySelector('.tab-btn'))">⚽ Ir a Grupos</button>
+      <p style="color:var(--gold)">${t('groupsNotSubmitted')}</p>
+      <button class="btn btn-gold" onclick="switchTab('pred','group',document.querySelector('.tab-btn'))">⚽ ${t('groupStage')}</button>
     </div>`;
   }
 
@@ -2251,7 +2373,7 @@ function renderKnockoutPredictions(predData, readonly=false, isGroupsSubmitted=f
   const anyPredicted=GROUPS.some(g=>groupPredStandings[g.id].some(s=>s.pj>0));
   if(anyPredicted){
     html+=`<div style="background:rgba(34,197,94,0.07);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:var(--green-light)">
-      🔮 Los equipos en octavos se sugieren automáticamente ${t('bracketFromPredictions')}. Puedes cambiarlos manualmente.
+      🔮 ${t('bracketFromPredictions')}
     </div>`;
   }
 
@@ -2357,13 +2479,20 @@ async function saveKnockoutPredictions(){
     }
   });
 
+  // Build matchDates map for Type B jornada locking
+  const matchDates={};
+  const allKoList=[...KNOCKOUT_MATCHES.roundOf32,...KNOCKOUT_MATCHES.quarterFinals,
+    ...KNOCKOUT_MATCHES.semiFinals,KNOCKOUT_MATCHES.thirdPlace,KNOCKOUT_MATCHES.final];
+  allKoList.forEach(m=>{ if(m.date) matchDates[m.id]=m.date; });
+
   try{
-    await apiPost(`/api/predictions/${game.id}`,{groupMatches:{},knockoutMatches,submitGroups:false});
+    const res=await apiPost(`/api/predictions/${game.id}`,{groupMatches:{},knockoutMatches,matchDates,submitGroups:false});
     if(!game.predictionsCache) game.predictionsCache={};
     if(!game.predictionsCache[authUserId]) game.predictionsCache[authUserId]={groupMatches:{},knockoutMatches:{}};
     if(!game.predictionsCache[authUserId].knockoutMatches) game.predictionsCache[authUserId].knockoutMatches={};
     Object.assign(game.predictionsCache[authUserId].knockoutMatches, knockoutMatches);
-    showToast(t('predictionsSaved'),'success');
+    if(res?.skipped?.length) showToast(`⚠️ ${res.skipped.length} partido(s) ya bloqueados por jornada`,'info');
+    else showToast(t('predictionsSaved'),'success');
   }catch(e){ showToast(e.message||'Error al guardar pronósticos eliminatorios','error'); }
 }
 
@@ -2438,7 +2567,7 @@ function renderRealGroupStandings(standings,groupId){
   const anyPlayed=standings.some(s=>s.pj>0);
   return `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;font-size:0.78rem">
     <div style="padding:0.4rem 0.6rem;background:rgba(255,255,255,0.05);font-family:'Barlow Condensed',sans-serif;font-size:0.8rem;font-weight:700;letter-spacing:1px;color:var(--gold)">
-      📊 Clasificación Real Grupo ${groupId}
+      📊 ${t("standings")} ${t("group")} ${groupId}
     </div>
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="color:var(--gray-400);font-size:0.68rem">
@@ -2465,7 +2594,7 @@ function renderRealGroupStandings(standings,groupId){
           </tr>`).join('')}
       </tbody>
     </table>
-    ${!anyPlayed?`<div style="padding:0.4rem 0.6rem;font-size:0.72rem;color:var(--gray-400);text-align:center">Sin resultados aún</div>`:''}
+    ${!anyPlayed?`<div style="padding:0.4rem 0.6rem;font-size:0.72rem;color:var(--gray-400);text-align:center">${t("noResults")}</div>`:''}
   </div>`;
 }
 
@@ -2733,12 +2862,18 @@ function renderAdmin(){
   `;
 }
 
-function adminLogin(){
-  const pass=document.getElementById('admin-pass').value;
-  if(pass===ADMIN_PASSWORD){isAdmin=true;renderAdmin();}
-  else{document.getElementById('admin-error').style.display='block';}
+async function adminLogin(){
+  const pass=document.getElementById('admin-pass')?.value||'';
+  if(!pass){ document.getElementById('admin-error').style.display='block'; return; }
+  try{
+    // Verify password via API (POST /api/results with 0 matches = just auth check)
+    await apiFetchAdmin('/api/results',{method:'POST',body:JSON.stringify({matches:[],adminPass:pass})});
+    isAdmin=true; adminPass=pass; renderAdmin();
+  } catch(e){
+    document.getElementById('admin-error').style.display='block';
+  }
 }
-function adminLogout(){isAdmin=false;renderAdmin();}
+function adminLogout(){ isAdmin=false; adminPass=''; renderAdmin(); }
 
 function renderAdminGroupResults(){
   const results=getResults();
@@ -2787,65 +2922,35 @@ function renderAdminGroupResults(){
 }
 
 async function saveDateResults(date){
-  const dateMatches = GROUP_MATCHES.filter(m => m.date === date);
-  const matches = [];
-  let missing = 0;
-
-  dateMatches.forEach(match => {
-    const h = document.getElementById(`admin_${match.id}_home`)?.value;
-    const a = document.getElementById(`admin_${match.id}_away`)?.value;
-
-    if (h !== '' && h !== undefined && a !== '' && a !== undefined) {
-      matches.push({
-        matchId: match.id,
-        matchType: 'group',
-        home: parseInt(h),
-        away: parseInt(a),
-        homeTeam: match.home,
-        awayTeam: match.away
-      });
-    } else {
-      missing++;
-    }
+  const dateMatches=GROUP_MATCHES.filter(m=>m.date===date);
+  const matches=[];
+  let missing=0;
+  dateMatches.forEach(match=>{
+    const h=document.getElementById(`admin_${match.id}_home`)?.value;
+    const a=document.getElementById(`admin_${match.id}_away`)?.value;
+    if(h!==''&&h!==undefined&&a!==''&&a!==undefined){
+      matches.push({matchId:match.id,matchType:'group',home:parseInt(h),away:parseInt(a)});
+    } else { missing++; }
   });
-
-  try {
-    await fetch('/api/results', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Admin-Pass': adminPassword
-      },
-      body: JSON.stringify({ matches })
-    });
-
-    matches.forEach(m => {
-      appData.globalResults.groupMatches[m.matchId] = {
-        home: m.home,
-        away: m.away
-      };
-    });
-
-    if (missing > 0) showToast(`⚠️ ${matches.length} guardados, ${missing} sin completar`, 'info');
-    else showToast(`✅ ${matches.length} resultados guardados para ${fmtDate(date)}`, 'success');
-
+  if(matches.length===0){ showToast(t('noResultsToSave'),'info'); return; }
+  try{
+    await apiAdminPost('/api/results',{matches});
+    matches.forEach(m=>{ appData.globalResults.groupMatches[m.matchId]={home:m.home,away:m.away}; });
+    if(missing>0) showToast(`⚠️ ${matches.length} guardados, ${missing} sin completar`,'info');
+    else showToast(`✅ ${matches.length} resultados guardados — ${fmtDate(date)}`,'success');
     renderAdmin();
-
-  } catch(e){
-    showToast('Error al guardar resultados','error');
-  }
+  } catch(e){ showToast(e.message||'Error al guardar resultados','error'); }
 }
 
 async function editDateResults(date){
-  if(!confirm(`¿Deseas corregir los resultados del ${fmtDate(date)}? Los campos quedarán editables.`)) return;
-  const dateMatches=GROUP_MATCHES.filter(m=>m.date===date);
-  const matchIds=dateMatches.map(m=>m.id);
+  if(!confirm(`¿Corregir resultados del ${fmtDate(date)}? Los campos quedarán editables.`)) return;
+  const matchIds=GROUP_MATCHES.filter(m=>m.date===date).map(m=>m.id);
   try{
-    await apiDel('/api/results',{matchIds});
+    await apiAdminDel('/api/results',{matchIds});
     matchIds.forEach(mid=>delete appData.globalResults.groupMatches[mid]);
-    showToast('✏️ Resultados desbloqueados para corrección','info');
+    showToast(`✏️ ${t('unlockedForEdit')}`,'info');
     renderAdmin();
-  } catch(e){ showToast('Error al desbloquear resultados','error'); }
+  } catch(e){ showToast(e.message||'Error al desbloquear resultados','error'); }
 }
 
 function renderAdminKnockoutResults(){
@@ -2917,43 +3022,41 @@ function renderAdminKnockoutResults(){
 }
 
 async function saveDateKoResults(date,phase){
-  const ko=KNOCKOUT_MATCHES;
-  const allMatches=[...ko.roundOf32,...ko.quarterFinals,...ko.semiFinals,ko.thirdPlace,ko.final];
-  const dateMatches=allMatches.filter(m=>m.date===date);
+  const allMatches=[...KNOCKOUT_MATCHES.roundOf32,...KNOCKOUT_MATCHES.quarterFinals,
+    ...KNOCKOUT_MATCHES.semiFinals,KNOCKOUT_MATCHES.thirdPlace,KNOCKOUT_MATCHES.final];
   const matches=[];
-  dateMatches.forEach(match=>{
+  allMatches.filter(m=>m.date===date).forEach(match=>{
     const h=document.getElementById(`admin_${match.id}_home`)?.value;
     const a=document.getElementById(`admin_${match.id}_away`)?.value;
     const ht=document.getElementById(`admin_ko_h_${match.id}`)?.value||'';
     const at=document.getElementById(`admin_ko_a_${match.id}`)?.value||'';
-    if(h!==''&&a!==''){
+    if(h!==''&&a!=='')
       matches.push({matchId:match.id,matchType:'knockout',home:parseInt(h),away:parseInt(a),homeTeam:ht,awayTeam:at});
-    }
   });
+  if(matches.length===0){ showToast('⚠️ No hay resultados para guardar','info'); return; }
   try{
-    await apiPost('/api/results',{matches});
+    await apiAdminPost('/api/results',{matches});
     if(!appData.globalResults.knockoutMatches) appData.globalResults.knockoutMatches={};
     matches.forEach(m=>{
       appData.globalResults.knockoutMatches[m.matchId]={home:m.home,away:m.away,homeTeam:m.homeTeam,awayTeam:m.awayTeam};
     });
-    showToast(`✅ ${matches.length} resultado(s) guardados para ${fmtDate(date)}`,'success');
+    showToast(`✅ ${matches.length} resultado(s) guardados — ${fmtDate(date)}`,'success');
     renderAdmin();
-  } catch(e){ showToast('Error al guardar resultados','error'); }
+  } catch(e){ showToast(e.message||'Error al guardar resultados','error'); }
 }
 
 async function editDateKoResults(date,phase){
   if(!confirm(`¿Corregir resultados del ${fmtDate(date)}?`)) return;
-  const ko=KNOCKOUT_MATCHES;
-  const allMatches=[...ko.roundOf32,...ko.quarterFinals,...ko.semiFinals,ko.thirdPlace,ko.final];
-  const dateMatches=allMatches.filter(m=>m.date===date);
-  const matchIds=dateMatches.map(m=>m.id);
+  const allMatches=[...KNOCKOUT_MATCHES.roundOf32,...KNOCKOUT_MATCHES.quarterFinals,
+    ...KNOCKOUT_MATCHES.semiFinals,KNOCKOUT_MATCHES.thirdPlace,KNOCKOUT_MATCHES.final];
+  const matchIds=allMatches.filter(m=>m.date===date).map(m=>m.id);
   try{
-    await apiDel('/api/results',{matchIds});
+    await apiAdminDel('/api/results',{matchIds});
     if(!appData.globalResults.knockoutMatches) appData.globalResults.knockoutMatches={};
     matchIds.forEach(mid=>delete appData.globalResults.knockoutMatches[mid]);
-    showToast('✏️ Resultados desbloqueados','info');
+    showToast(`✏️ ${t('unlockedForEdit')}`,'info');
     renderAdmin();
-  } catch(e){ showToast('Error al desbloquear resultados','error'); }
+  } catch(e){ showToast(e.message||'Error al desbloquear resultados','error'); }
 }
 
 // =====================================================================
@@ -3025,31 +3128,5 @@ async function init(){
 
 document.addEventListener('DOMContentLoaded',init);
 </script>
-<script>
-async function adminLogin() {
-    const pass = document.getElementById("admin-pass").value;
-
-    const resp = await fetch("/api/results", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "X-Admin-Pass": pass
-        },
-        body: JSON.stringify({
-            matches: []
-        })
-    });
-
-    const data = await resp.json();
-
-    if (data.ok) {
-        isAdmin = true;
-        renderAdmin(); // vuelve a dibujar el panel como admin
-    } else {
-        document.getElementById("admin-error").style.display = "block";
-    }
-}
-</script>
-
 </body>
 </html>
