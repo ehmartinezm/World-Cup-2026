@@ -556,6 +556,7 @@ def translate():
     target = body.get('target', 'en')
     if not q: return ok({'translatedText': ''})
     try:
+   try:
     resp = requests.post(
         LIBRETRANSLATE_URL,
         json={'q': q, 'source': source, 'target': target, 'format': 'text'},
