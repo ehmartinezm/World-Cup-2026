@@ -68,6 +68,8 @@ def init_db():
         id         TEXT PRIMARY KEY,
         username   TEXT NOT NULL UNIQUE COLLATE NOCASE,
         pw_hash    TEXT NOT NULL,
+        email      TEXT,                              -- for account recovery
+        alias      TEXT,                              -- display name in games
         created_at TEXT NOT NULL
     );
 
@@ -189,23 +191,30 @@ def register():
     body     = request.get_json(force=True) or {}
     username = (body.get('username') or '').strip()
     password = body.get('password') or ''
+    email    = (body.get('email')    or '').strip() or None
+    alias    = (body.get('alias')    or '').strip() or None
     if not username or not password:
         return err('Usuario y contraseña son requeridos')
     if len(username) < 3:
         return err('El usuario debe tener mínimo 3 caracteres')
     if len(password) < 4:
         return err('La contraseña debe tener mínimo 4 caracteres')
+    if email and '@' not in email:
+        return err('Correo electrónico inválido')
     db = get_db()
     if db.execute("SELECT 1 FROM users WHERE username=?", (username,)).fetchone():
         return err('Ese nombre de usuario ya está en uso')
+    if email and db.execute("SELECT 1 FROM users WHERE email=?", (email,)).fetchone():
+        return err('Ese correo ya está registrado')
     uid   = new_id()
     token = secrets.token_hex(32)
-    db.execute("INSERT INTO users(id,username,pw_hash,created_at) VALUES(?,?,?,?)",
-               (uid, username, generate_password_hash(password), now_iso()))
+    db.execute("INSERT INTO users(id,username,pw_hash,email,alias,created_at) VALUES(?,?,?,?,?,?)",
+               (uid, username, generate_password_hash(password), email, alias, now_iso()))
     db.execute("INSERT INTO sessions(token,user_id,created_at) VALUES(?,?,?)",
                (token, uid, now_iso()))
     db.commit()
-    return ok({'token': token, 'userId': uid, 'username': username})
+    display = alias or username
+    return ok({'token': token, 'userId': uid, 'username': username, 'alias': display})
 
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -223,7 +232,8 @@ def login():
     db.execute("INSERT INTO sessions(token,user_id,created_at) VALUES(?,?,?)",
                (token, user['id'], now_iso()))
     db.commit()
-    return ok({'token': token, 'userId': user['id'], 'username': user['username']})
+    display = user['alias'] or user['username']
+    return ok({'token': token, 'userId': user['id'], 'username': user['username'], 'alias': display})
 
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -242,7 +252,7 @@ def logout():
 def build_game(row, db, viewer_id=None):
     gid     = row['id']
     members = db.execute(
-        """SELECT gm.user_id, u.username, gm.joined_at, gm.groups_submitted
+        """SELECT gm.user_id, u.username, u.alias, gm.joined_at, gm.groups_submitted
            FROM game_members gm JOIN users u ON u.id=gm.user_id
            WHERE gm.game_id=? ORDER BY gm.joined_at""", (gid,)
     ).fetchall()
@@ -253,7 +263,8 @@ def build_game(row, db, viewer_id=None):
         'ownerId':   row['owner_id'],
         'gameType':  row['game_type'],
         'createdAt': row['created_at'],
-        'members':   [{'userId': m['user_id'], 'username': m['username'],
+        'members':   [{'userId': m['user_id'],
+                       'username': m['alias'] or m['username'],  # show alias if set
                        'joinedAt': m['joined_at'],
                        'groupsSubmitted': bool(m['groups_submitted'])}
                       for m in members],
