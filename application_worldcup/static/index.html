@@ -1142,28 +1142,68 @@ async function kickMember(gameId, userId, username){
 }
 
 // ── AUTH MODALS ───────────────────────────────────────────────────────
-function showLoginModal(){
+function showLoginModal(defaultMode='login'){
+  authMode=defaultMode;
   openModal(`
     <div class="modal-header"><h3>🔐 ${t('loginTitle')}</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:1rem">
       <div style="display:flex;gap:0.5rem;padding-bottom:0.75rem;border-bottom:1px solid rgba(255,255,255,0.1)">
-        <button id="tab-login" class="btn btn-sm btn-primary" onclick="switchAuthTab('login')">${t('login')}</button>
-        <button id="tab-register" class="btn btn-sm btn-outline" onclick="switchAuthTab('register')">${t('register')}</button>
+        <button id="tab-login" class="btn btn-sm ${defaultMode==='login'?'btn-primary':'btn-outline'}" onclick="switchAuthTab('login')">${t('login')}</button>
+        <button id="tab-register" class="btn btn-sm ${defaultMode==='register'?'btn-primary':'btn-outline'}" onclick="switchAuthTab('register')">${t('register')}</button>
       </div>
-      <div style="display:flex;flex-direction:column;gap:0.75rem">
-        <div class="form-group"><label class="form-label">👤 ${t('username')}</label>
-          <input type="text" id="auth-username" class="form-input" placeholder="${t('usernamePlaceholder')}" maxlength="40" autocomplete="username"></div>
-        <div class="form-group"><label class="form-label">🔑 ${t('password')}</label>
+      <div style="display:flex;flex-direction:column;gap:0.75rem" id="auth-fields">
+        <!-- Login: username + password -->
+        <div class="form-group" id="field-username">
+          <label class="form-label">👤 ${t('username')}</label>
+          <input type="text" id="auth-username" class="form-input" placeholder="${t('usernamePlaceholder')}" maxlength="40" autocomplete="username">
+          <div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.2rem" id="hint-username" style="display:none">Mínimo 3 caracteres. Este es tu nombre de acceso.</div>
+        </div>
+        <!-- Register only: email -->
+        <div class="form-group" id="field-email" style="display:none">
+          <label class="form-label">📧 Correo electrónico</label>
+          <input type="email" id="auth-email" class="form-input" placeholder="tu@correo.com" autocomplete="email">
+          <div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.2rem">Para recuperar tu cuenta. No se muestra públicamente.</div>
+        </div>
+        <!-- Register only: alias (display name) -->
+        <div class="form-group" id="field-alias" style="display:none">
+          <label class="form-label">🏷️ Alias en partidas</label>
+          <input type="text" id="auth-alias" class="form-input" placeholder="Como quieres que te vean tus amigos" maxlength="40" autocomplete="nickname">
+          <div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.2rem">Opcional. Si lo dejas vacío se usará tu nombre de usuario.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">🔑 ${t('password')}</label>
           <input type="password" id="auth-password" class="form-input" placeholder="••••••" autocomplete="current-password"
-            onkeydown="if(event.key==='Enter')doAuth()"></div>
+            onkeydown="if(event.key==='Enter')doAuth()">
+          <div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.2rem" id="hint-password" style="display:none">Mínimo 4 caracteres.</div>
+        </div>
         <div id="auth-error" style="color:var(--red);font-size:0.82rem;display:none"></div>
+      </div>
+      <div id="login-forgot" style="text-align:right;font-size:0.78rem">
+        <a style="color:var(--gray-400);cursor:pointer" onclick="showForgotPasswordInfo()">¿Olvidaste tu contraseña?</a>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
-      <button class="btn btn-primary" id="auth-submit-btn" onclick="doAuth()">${t('login')}</button>
+      <button class="btn btn-primary" id="auth-submit-btn" onclick="doAuth()">${defaultMode==='login'?t('login'):t('register')}</button>
     </div>`);
+  // Apply initial state
+  if(defaultMode==='register') _showRegisterFields();
   setTimeout(()=>document.getElementById('auth-username')?.focus(),100);
+}
+
+function _showRegisterFields(){
+  document.getElementById('field-email').style.display='';
+  document.getElementById('field-alias').style.display='';
+  document.getElementById('hint-username').style.display='';
+  document.getElementById('hint-password').style.display='';
+  document.getElementById('login-forgot').style.display='none';
+}
+function _hideRegisterFields(){
+  document.getElementById('field-email').style.display='none';
+  document.getElementById('field-alias').style.display='none';
+  document.getElementById('hint-username').style.display='none';
+  document.getElementById('hint-password').style.display='none';
+  document.getElementById('login-forgot').style.display='';
 }
 
 let authMode='login';
@@ -1173,21 +1213,41 @@ function switchAuthTab(mode){
   document.getElementById('tab-register').className=`btn btn-sm ${mode==='register'?'btn-primary':'btn-outline'}`;
   document.getElementById('auth-submit-btn').textContent=t(mode==='login'?'login':'register');
   document.getElementById('auth-error').style.display='none';
+  if(mode==='register') _showRegisterFields(); else _hideRegisterFields();
+}
+
+function showForgotPasswordInfo(){
+  const errEl=document.getElementById('auth-error');
+  errEl.style.color='#60a5fa';
+  errEl.textContent='Para recuperar tu cuenta, contacta al administrador de tu partida con tu correo registrado.';
+  errEl.style.display='block';
 }
 
 async function doAuth(){
   const username=document.getElementById('auth-username')?.value.trim();
   const password=document.getElementById('auth-password')?.value;
   const errEl=document.getElementById('auth-error');
-  errEl.style.display='none';
+  errEl.style.color='var(--red)'; errEl.style.display='none';
   if(!username||!password){errEl.textContent=t('fillAllFields');errEl.style.display='block';return;}
   try{
-    const ep=authMode==='login'?'/api/auth/login':'/api/auth/register';
-    const data=await apiPost(ep,{username,password});
-    saveAuthState(data.token,data.userId,data.username);
-    closeModal(); updateUserPill(); await loadData();
-    showToast(`¡${t('welcome')}, ${data.username}! 🎉`,'success');
-    showView('partidas');
+    if(authMode==='register'){
+      const email=(document.getElementById('auth-email')?.value||'').trim();
+      const alias=(document.getElementById('auth-alias')?.value||'').trim();
+      if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+        errEl.textContent='Correo electrónico inválido.';errEl.style.display='block';return;
+      }
+      const data=await apiPost('/api/auth/register',{username,password,email:email||null,alias:alias||null});
+      saveAuthState(data.token,data.userId,data.alias||data.username);
+      closeModal(); updateUserPill(); await loadData();
+      showToast(`¡${t('welcome')}, ${data.alias||data.username}! 🎉`,'success');
+      showView('partidas');
+    } else {
+      const data=await apiPost('/api/auth/login',{username,password});
+      saveAuthState(data.token,data.userId,data.alias||data.username);
+      closeModal(); updateUserPill(); await loadData();
+      showToast(`¡${t('welcome')}, ${data.alias||data.username}! 🎉`,'success');
+      showView('partidas');
+    }
   }catch(e){ errEl.textContent=e.message; errEl.style.display='block'; }
 }
 
@@ -1604,7 +1664,23 @@ function calcParticipantTotal(participantId){
   (ko.semiFinals2||[]).forEach(m=>addMatch(m.id,'semiFinals'));
   addMatch(ko.thirdPlace.id,'thirdPlace');
   addMatch(ko.final.id,'final');
-  return {total,phaseBreakdown:pb,counts};
+
+  // Count bracket bonuses earned (matchup acertado)
+  let bracketCount=0;
+  const resultsFull=getResults();
+  const predFull=game?.predictionsCache?.[participantId]||{groupMatches:{},knockoutMatches:{}};
+  const allKoFull=[...ko.roundOf32,...ko.quarterFinals,...ko.semiFinals,...(ko.semiFinals2||[]),ko.thirdPlace,ko.final];
+  allKoFull.forEach(m=>{
+    const rr=resultsFull.knockoutMatches?.[m.id];
+    const pp=predFull.knockoutMatches?.[m.id];
+    if(rr&&rr.homeTeam&&rr.awayTeam&&pp?.homeTeam&&pp?.awayTeam){
+      if((rr.homeTeam===pp.homeTeam&&rr.awayTeam===pp.awayTeam)||(rr.homeTeam===pp.awayTeam&&rr.awayTeam===pp.homeTeam))
+        bracketCount++;
+    }
+  });
+  // Group stage R32 bracket bonus (based on R32 matchup from group pred)
+  // Already counted via bonus badge, include in bracketCount for display
+  return {total,phaseBreakdown:pb,counts,bracketCount};
 }
 
 // =====================================================================
@@ -1673,6 +1749,67 @@ function renderHome(){
             <button class="btn btn-gold btn-lg" onclick="showView('predictions')">⚽ ${t('startPredicting')}</button>`
           :`<button class="btn btn-primary btn-lg" onclick="showLoginModal()">🔐 ${t('login')} / ${t('register')}</button>`}
         <button class="btn btn-outline btn-lg" onclick="showView('rules')">📋 ${t('rules')}</button>
+      </div>
+    </div>
+
+    <!-- ── About the game ── -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;margin-bottom:1.5rem">
+
+      <div class="card" style="border-color:rgba(245,158,11,0.3)">
+        <div class="card-header" style="padding-bottom:0.5rem">
+          <h3 style="color:var(--gold)">⚽ ¿De qué se trata?</h3>
+        </div>
+        <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
+          Pronostica los resultados del Mundial 2026 (48 equipos · 104 partidos · 12 grupos) y compite
+          con amigos en tu propia quiniela privada. Ganas puntos por marcadores exactos, resultados
+          correctos y por acertar las llaves de eliminatoria.
+          <div style="margin-top:0.5rem"><a onclick="showView('rules')" style="color:var(--gold);cursor:pointer;font-size:0.8rem">Ver reglamento completo →</a></div>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:rgba(59,130,246,0.3)">
+        <div class="card-header" style="padding-bottom:0.5rem">
+          <h3 style="color:#60a5fa">🎮 Modos de juego</h3>
+        </div>
+        <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
+          <div style="margin-bottom:0.5rem">
+            <span style="color:var(--gold);font-weight:700">📋 Tipo A — Completo</span><br>
+            Pronosticas todos los partidos de grupos de una sola vez antes de que inicie el torneo.
+            La eliminatoria se activa cuando el admin finalice la fase de grupos con los equipos reales clasificados.
+          </div>
+          <div>
+            <span style="color:#60a5fa;font-weight:700">📅 Tipo B — Por Jornada</span><br>
+            Pronosticas jornada a jornada. Cada fecha se bloquea 4 horas antes del primer partido.
+            Ideal para quien quiere seguir el torneo partido a partido.
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:rgba(34,197,94,0.3)">
+        <div class="card-header" style="padding-bottom:0.5rem">
+          <h3 style="color:var(--green-light)">👥 Partidas y grupos</h3>
+        </div>
+        <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
+          Crea una partida, elige el tipo de juego y comparte el <strong>código</strong> o
+          <strong>QR</strong> con tus amigos para que se unan. Tú eres el admin de tu partida —
+          puedes ver los pronósticos de todos (en modo solo lectura) y personalizar el reglamento
+          de puntuación. Puedes pertenecer a múltiples partidas al mismo tiempo.
+        </div>
+      </div>
+
+      <div class="card" style="border-color:rgba(139,92,246,0.3)">
+        <div class="card-header" style="padding-bottom:0.5rem">
+          <h3 style="color:#a78bfa">👑 Versión Premium</h3>
+        </div>
+        <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
+          <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.35rem">
+            <li>🤖 Pronóstico sugerido por IA (estadísticas y enfrentamientos históricos)</li>
+            <li>📊 Tabla de clasificación completa (todos los participantes)</li>
+            <li>🎯 Sugerencia de marcador estratégico vs rivales en rondas avanzadas</li>
+            <li>🔍 Búsqueda avanzada de participantes</li>
+          </ul>
+          <div style="margin-top:0.6rem;font-size:0.78rem;color:var(--gray-400)">Próximamente disponible.</div>
+        </div>
       </div>
     </div>
 
@@ -1921,23 +2058,98 @@ function showJoinGameModal(){
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <p style="font-size:0.85rem;color:var(--gray-400);margin-bottom:1rem">${t('joinGameDesc')}</p>
-      <div style="margin-bottom:0.6rem;font-size:0.83rem;color:var(--green-light)">
+      <p style="font-size:0.85rem;color:var(--gray-400);margin-bottom:0.75rem">${t('joinGameDesc')}</p>
+      <div style="margin-bottom:0.75rem;font-size:0.83rem;color:var(--green-light)">
         👤 ${t('loggedInAs')}: <strong>${authUsername}</strong>
       </div>
-      <div class="form-group">
-        <label class="form-label">${t('gameCode')}</label>
-        <input type="text" id="join-code-input" class="form-input" placeholder="ABC123" maxlength="6"
-          style="letter-spacing:3px;font-size:1.1rem;text-transform:uppercase" autocomplete="off"
-          onkeydown="if(event.key==='Enter')joinGame()">
+
+      <!-- Tabs: Código | QR -->
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.85rem;border-bottom:1px solid rgba(255,255,255,0.08);padding-bottom:0.6rem">
+        <button id="join-tab-code" class="btn btn-sm btn-primary" onclick="switchJoinTab('code')">🔑 Código</button>
+        <button id="join-tab-qr"   class="btn btn-sm btn-outline" onclick="switchJoinTab('qr')">📷 Escanear QR</button>
+      </div>
+
+      <!-- Code entry -->
+      <div id="join-panel-code">
+        <div class="form-group">
+          <label class="form-label">${t('gameCode')}</label>
+          <input type="text" id="join-code-input" class="form-input" placeholder="ABC123" maxlength="6"
+            style="letter-spacing:3px;font-size:1.1rem;text-transform:uppercase;text-align:center" autocomplete="off"
+            onkeydown="if(event.key==='Enter')joinGame()">
+        </div>
+      </div>
+
+      <!-- QR scanner -->
+      <div id="join-panel-qr" style="display:none">
+        <div style="text-align:center;padding:0.5rem 0">
+          <video id="qr-video" style="width:100%;max-width:280px;border-radius:10px;border:2px solid rgba(59,130,246,0.4)" autoplay muted playsinline></video>
+          <div id="qr-status" style="font-size:0.8rem;color:var(--gray-400);margin-top:0.5rem">Apunta la cámara al código QR de la partida</div>
+          <div id="qr-result" style="font-size:0.85rem;color:var(--green-light);margin-top:0.4rem;font-weight:700"></div>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal()">${t('cancel')}</button>
-      <button class="btn btn-gold" onclick="joinGame()">${t('joinBtn')}</button>
+      <button class="btn btn-outline" onclick="stopQrScanner();closeModal()">${t('cancel')}</button>
+      <button class="btn btn-gold" id="join-submit-btn" onclick="joinGame()">${t('joinBtn')}</button>
     </div>
   `);
   setTimeout(()=>document.getElementById('join-code-input')?.focus(),100);
+}
+
+let _qrStream=null;
+function switchJoinTab(tab){
+  document.getElementById('join-tab-code').className=`btn btn-sm ${tab==='code'?'btn-primary':'btn-outline'}`;
+  document.getElementById('join-tab-qr').className=`btn btn-sm ${tab==='qr'?'btn-primary':'btn-outline'}`;
+  document.getElementById('join-panel-code').style.display=tab==='code'?'':'none';
+  document.getElementById('join-panel-qr').style.display=tab==='qr'?'':'none';
+  document.getElementById('join-submit-btn').style.display=tab==='code'?'':'none';
+  if(tab==='qr') startQrScanner(); else stopQrScanner();
+}
+
+async function startQrScanner(){
+  const video=document.getElementById('qr-video');
+  const statusEl=document.getElementById('qr-status');
+  const resultEl=document.getElementById('qr-result');
+  if(!video) return;
+  try{
+    _qrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject=_qrStream;
+    statusEl.textContent='Cámara activa — apunta al QR';
+    // Use BarcodeDetector if available (Chrome/Android)
+    if('BarcodeDetector' in window){
+      const detector=new BarcodeDetector({formats:['qr_code']});
+      const scan=async()=>{
+        if(!_qrStream) return;
+        try{
+          const codes=await detector.detect(video);
+          if(codes.length>0){
+            const raw=codes[0].rawValue;
+            // Extract code: could be a URL like ...?join=ABC123 or just ABC123
+            const match=raw.match(/(?:join=|\/)([A-Z0-9]{6})/i)||raw.match(/^([A-Z0-9]{6})$/i);
+            const code=(match?match[1]:raw).toUpperCase().slice(0,6);
+            resultEl.textContent='✅ Código detectado: '+code;
+            statusEl.textContent='';
+            stopQrScanner();
+            // Switch back to code tab and fill input
+            switchJoinTab('code');
+            const inp=document.getElementById('join-code-input');
+            if(inp){inp.value=code;}
+            return;
+          }
+        }catch(e){}
+        setTimeout(scan,300);
+      };
+      video.addEventListener('play',()=>setTimeout(scan,500),{once:true});
+    } else {
+      statusEl.textContent='Tu navegador no soporta escaneo QR automático. Ingresa el código manualmente.';
+    }
+  }catch(e){
+    statusEl.textContent='No se pudo acceder a la cámara: '+e.message;
+  }
+}
+
+function stopQrScanner(){
+  if(_qrStream){ _qrStream.getTracks().forEach(t=>t.stop()); _qrStream=null; }
 }
 
 async function joinGame(){
@@ -2182,7 +2394,7 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
   }
 
   if(gameType==='B'){
-    // ── Tipo B: group by DATE, show lock status per jornada ──────────────
+    // ── Tipo B: group by DATE ─────────────────────────────────────────────
     const byDate={};
     GROUP_MATCHES.forEach(m=>{ if(!byDate[m.date]) byDate[m.date]=[]; byDate[m.date].push(m); });
     Object.keys(byDate).sort().forEach(date=>{
@@ -2219,6 +2431,21 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
           </div>
         </div>`;
     });
+    // ── Tipo B: Mejores Terceros + 16avos al final (igual que Tipo A) ────
+    const thirdsB=getBestThirdPlaces(getResults(),pred,true);
+    if(thirdsB.all.length>0){
+      const slotAssignB=assignThirdsToSlots(thirdsB.all);
+      const groupPredStB={};
+      GROUPS.forEach(g=>{groupPredStB[g.id]=calcGroupStandingsFromPred(g.id,pred);});
+      html+=`<div style="margin-top:1.5rem">
+        <div style="font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:0.6rem">
+          🏅 Mis Mejores Terceros y Emparejamientos 16avos
+          <span style="font-size:0.72rem;font-weight:400;color:var(--gray-400);margin-left:0.4rem">Bonificación +${getGameScoringRules().groupStage?.correctBracketBonus||5} pts por llave acertada</span>
+        </div>
+        ${renderBestThirdsPanel(thirdsB)}
+        <div style="margin-top:0.75rem">${renderR32BracketFromPred(KNOCKOUT_MATCHES.roundOf32,groupPredStB,slotAssignB,thirdsB,getResults())}</div>
+      </div>`;
+    }
   } else {
     // ── Tipo A: group by group (existing layout) ─────────────────────────
     GROUPS.forEach(group=>{
@@ -2250,8 +2477,8 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
     });
   }
 
-  // ── Mejores Terceros + Emparejamientos R32 al final de grupos (Tipo A) ──
-  if(gameType==='A'){
+  // ── Mejores Terceros + Emparejamientos R32 al final de grupos (Tipo A y B) ──
+  if(gameType==='A'||gameType==='B'){
     const thirdsForGroup=getBestThirdPlaces(getResults(),pred,true);
     if(thirdsForGroup.all.length>0){
       const slotAssignGroup=assignThirdsToSlots(thirdsForGroup.all);
@@ -2260,7 +2487,7 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
       html+=`<div style="margin-top:1.5rem">
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:700;letter-spacing:1px;color:var(--gold);margin-bottom:0.6rem">
           🏅 Mis Mejores Terceros y Emparejamientos 16avos
-          <span style="font-size:0.72rem;font-weight:400;color:var(--gray-400);margin-left:0.4rem">Bonificación +5 pts por llave acertada</span>
+          <span style="font-size:0.72rem;font-weight:400;color:var(--gray-400);margin-left:0.4rem">Bonificación +${(getGameScoringRules().groupStage||{}).correctBracketBonus||5} pts por llave acertada</span>
         </div>
         ${renderBestThirdsPanel(thirdsForGroup)}
         <div style="margin-top:0.75rem">${renderR32BracketFromPred(KNOCKOUT_MATCHES.roundOf32,groupPredSt,slotAssignGroup,thirdsForGroup,getResults())}</div>
@@ -2272,12 +2499,21 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
     if(gameType==='A'){
       html+=`<div class="save-bar" style="gap:0.75rem;flex-wrap:wrap">
         <button class="btn btn-outline btn-lg" onclick="showRandomFillModal()" style="border-color:rgba(139,92,246,0.5);color:#a78bfa">🎲 Llenar aleatorio</button>
+        <button class="btn btn-outline btn-lg" style="border-color:rgba(139,92,246,0.4);color:#a78bfa;cursor:not-allowed;opacity:0.7"
+          title="Próximamente — Versión Premium" onclick="showPremiumToast()">
+          👑 🤖 Sugerencia IA <span style="font-size:0.65rem;background:rgba(139,92,246,0.3);padding:1px 5px;border-radius:4px;margin-left:4px">PREMIUM</span>
+        </button>
         <button class="btn btn-outline btn-lg" onclick="saveGroupPredictions(false)">💾 ${t('savePredictions')}</button>
         <button class="btn btn-gold btn-lg" onclick="saveGroupPredictions(true)">🔒 ${t('submitGroups')}</button>
       </div>`;
     } else {
-      // Type B: save button per group date; this bottom button saves everything not yet locked
-      html+=`<div class="save-bar">
+      // Type B save bar: Premium AI button + global save
+      html+=`<div class="save-bar" style="gap:0.75rem;flex-wrap:wrap">
+        <button class="btn btn-outline btn-lg" style="border-color:rgba(139,92,246,0.4);color:#a78bfa;cursor:not-allowed;opacity:0.7"
+          title="Próximamente — Versión Premium"
+          onclick="showPremiumToast()">
+          👑 🤖 Sugerencia IA <span style="font-size:0.65rem;background:rgba(139,92,246,0.3);padding:1px 5px;border-radius:4px;margin-left:4px">PREMIUM</span>
+        </button>
         <button class="btn btn-primary btn-lg" onclick="saveGroupPredictions(false)">💾 ${t('savePredictions')}</button>
       </div>`;
     }
@@ -2462,6 +2698,10 @@ async function savePredsByDate(date){
     if(res?.skipped?.length) showToast(`⚠️ ${res.skipped.length} ${t('lockedByJornada2')}`,'info');
     else showToast(`✅ ${t('predictionsSaved')} — ${fmtDate(date)}`,'success');
   }catch(e){ showToast(e.message||'Error al guardar','error'); }
+}
+
+function showPremiumToast(){
+  showToast('👑 Esta función estará disponible en la versión Premium próximamente.','info');
 }
 
 function showRandomFillModal(){
@@ -2741,6 +2981,197 @@ function renderR32BracketFromPred(r32Matches, groupPredStandings, slotAssignment
 
 // saveR32Predictions removed — R32 bracket is read-only (bonus is for matchup, not score)
 
+/**
+ * Tipo B Knockout: shows all KO matches grouped by date/jornada.
+ * Each jornada shows:
+ *   - Lock status (locked if <4h before first match)
+ *   - Matchup cards (home vs away) with bracket bonus badge
+ *   - Score inputs for the result (for result points scoring)
+ * As results come in, next jornada unlocks.
+ */
+function renderTypeBKnockout(pred, results, readonly){
+  const allKoMatches=[
+    ...KNOCKOUT_MATCHES.roundOf32,
+    ...KNOCKOUT_MATCHES.quarterFinals,
+    ...KNOCKOUT_MATCHES.semiFinals,
+    ...(KNOCKOUT_MATCHES.semiFinals2||[]),
+    KNOCKOUT_MATCHES.thirdPlace,
+    KNOCKOUT_MATCHES.final,
+  ];
+
+  const phaseOf={};
+  KNOCKOUT_MATCHES.roundOf32.forEach(m=>{phaseOf[m.id]='roundOf32';});
+  KNOCKOUT_MATCHES.quarterFinals.forEach(m=>{phaseOf[m.id]='quarterFinals';});
+  KNOCKOUT_MATCHES.semiFinals.forEach(m=>{phaseOf[m.id]='semiFinals';});
+  (KNOCKOUT_MATCHES.semiFinals2||[]).forEach(m=>{phaseOf[m.id]='semiFinals2';});
+  phaseOf[KNOCKOUT_MATCHES.thirdPlace.id]='thirdPlace';
+  phaseOf[KNOCKOUT_MATCHES.final.id]='final';
+
+  // Group by date
+  const byDate={};
+  allKoMatches.forEach(m=>{ if(!byDate[m.date]) byDate[m.date]=[]; byDate[m.date].push(m); });
+
+  const phaseLabels={
+    roundOf32:'🔵 16avos de Final', quarterFinals:'🟢 Octavos',
+    semiFinals:'🟡 Cuartos', semiFinals2:'🟠 Semifinales',
+    thirdPlace:'🥉 3er y 4to Lugar', final:'🏆 Final',
+  };
+
+  // Build winner map from saved predictions for bracket resolution
+  const winnerByMn={};
+  KNOCKOUT_MATCHES.roundOf32.forEach(m=>{
+    const p=pred.knockoutMatches?.[m.id];
+    if(!p||p.home===''||p.home===undefined) return;
+    const h=parseInt(p.home),a=parseInt(p.away);
+    let w='';
+    if(h>a) w=p.homeTeam||'';
+    else if(a>h) w=p.awayTeam||'';
+    else w=p.penaltyWinner||'';
+    if(w) winnerByMn[m.mn]=w;
+  });
+  // Also cascade saved predictions from subsequent phases
+  [...KNOCKOUT_MATCHES.quarterFinals,...KNOCKOUT_MATCHES.semiFinals,...(KNOCKOUT_MATCHES.semiFinals2||[])].forEach(m=>{
+    const p=pred.knockoutMatches?.[m.id];
+    if(!p||p.home===''||p.home===undefined) return;
+    const h=parseInt(p.home),a=parseInt(p.away);
+    let w='';
+    if(h>a) w=p.homeTeam||'';
+    else if(a>h) w=p.awayTeam||'';
+    else w=p.penaltyWinner||'';
+    if(w) winnerByMn[m.mn]=w;
+  });
+
+  function resolveSlot(slot, matchId){
+    if(!slot) return '';
+    const mW=slot.match(/^W(\d+)$/); if(mW) return winnerByMn[parseInt(mW[1])]||'';
+    const mL=slot.match(/^L(\d+)$/);
+    if(mL){
+      const prev=allKoMatches.find(m=>m.mn===parseInt(mL[1]));
+      if(!prev) return '';
+      const pp=pred.knockoutMatches?.[prev.id];
+      if(!pp||pp.home===''||pp.home===undefined) return '';
+      const ph=parseInt(pp.home),pa=parseInt(pp.away);
+      if(ph>pa) return pp.awayTeam||'';
+      if(pa>ph) return pp.homeTeam||'';
+      const pw=pp.penaltyWinner||'';
+      return pw===pp.homeTeam?pp.awayTeam||'':pp.homeTeam||'';
+    }
+    return '';
+  }
+
+  const bonusRules=getGameScoringRules();
+  let html='';
+
+  Object.keys(byDate).sort().forEach(date=>{
+    const dateMatches=byDate[date];
+    const realResultsForDate=dateMatches.some(m=>results.knockoutMatches?.[m.id]);
+    const lockedDate=isJornadaLockedClient(date);
+    const phasesInDate=[...new Set(dateMatches.map(m=>phaseLabels[phaseOf[m.id]]||''))].join(' · ');
+
+    html+=`<div class="group-card" style="margin-bottom:0.9rem">
+      <div class="group-header" style="justify-content:space-between;align-items:center">
+        <h3 style="color:var(--gold);font-family:'Barlow Condensed',sans-serif;font-size:0.95rem;letter-spacing:1px">
+          📅 ${fmtDate(date)}
+          <span style="font-size:0.72rem;font-weight:400;color:var(--gray-400);margin-left:0.4rem">${phasesInDate}</span>
+          ${realResultsForDate?'<span style="color:var(--green-light);font-size:0.75rem;margin-left:0.4rem">✅</span>'
+            :lockedDate?'<span style="font-size:0.75rem;color:var(--red);margin-left:0.4rem">🔒</span>'
+            :'<span style="font-size:0.72rem;color:var(--gray-400);margin-left:0.4rem">⏰</span>'}
+        </h3>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.35rem;padding:0.5rem 0">
+        ${dateMatches.map(match=>{
+          const phase=phaseOf[match.id]||'roundOf32';
+          const p=pred.knockoutMatches?.[match.id]||{};
+          const r=results.knockoutMatches?.[match.id];
+          const pts=r?getMatchPoints(match.id,phase,currentParticipant):null;
+          const locked=readonly||!!r||lockedDate;
+
+          // Resolve teams from slot codes
+          const hId=p.homeTeam||resolveSlot(match.hs,match.id);
+          const aId=p.awayTeam||resolveSlot(match.as,match.id);
+          const hTeam=hId?getTeam(hId):null;
+          const aTeam=aId?getTeam(aId):null;
+          const hName=hTeam?hTeam.name[currentLang]||hTeam.name.es:match.hs||'?';
+          const aName=aTeam?aTeam.name[currentLang]||aTeam.name.es:match.as||'?';
+
+          // Bracket bonus
+          const rules=bonusRules[phase]||{};
+          const bonus=rules.correctBracketBonus||0;
+          let bonusBadge='';
+          if(r&&r.homeTeam&&r.awayTeam&&hId&&aId&&bonus>0){
+            const match_=(r.homeTeam===hId&&r.awayTeam===aId)||(r.homeTeam===aId&&r.awayTeam===hId);
+            bonusBadge=match_?`<span class="pts-badge exact">+${bonus} llave ✓</span>`:`<span class="pts-badge wrong">llave ✗</span>`;
+          }
+
+          // Score badge
+          let scoreBadge='',statusClass='';
+          if(r&&r.home!==undefined&&p.home!==undefined&&p.home!==''){
+            const st=calcScore(p.home,p.away,r.home,r.away);
+            if(st==='exact'){statusClass='exact';scoreBadge=`<span class="pts-badge exact">+${pts}</span>`;}
+            else if(st==='resultAndGoals'){statusClass='result-goals';scoreBadge=`<span class="pts-badge result-goals">+${pts}</span>`;}
+            else if(st==='resultOnly'){statusClass='result-only';scoreBadge=`<span class="pts-badge result-only">+${pts}</span>`;}
+            else{statusClass='wrong';scoreBadge=`<span class="pts-badge wrong">0</span>`;}
+          }
+
+          const hVal=p.home!==undefined&&p.home!==''?parseInt(p.home):null;
+          const aVal=p.away!==undefined&&p.away!==''?parseInt(p.away):null;
+          const isDraw=hVal!==null&&aVal!==null&&hVal===aVal;
+          const penSel=isDraw&&hId&&aId&&!locked?`
+            <div style="margin-top:0.3rem;padding:0.3rem 0.5rem;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:6px;font-size:0.73rem;color:var(--gold)">
+              ⚽ Empate — ¿Quién avanza?
+              <div style="display:flex;gap:0.5rem;margin-top:0.25rem;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer">
+                  <input type="radio" name="pen_${match.id}" value="${hId}" ${p.penaltyWinner===hId?'checked':''} onchange="setPenaltyWinner('${match.id}','${hId}')">
+                  ${hId?flagImg(hId,'flag-img-sm'):''}<span>${hName}</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:0.25rem;cursor:pointer">
+                  <input type="radio" name="pen_${match.id}" value="${aId}" ${p.penaltyWinner===aId?'checked':''} onchange="setPenaltyWinner('${match.id}','${aId}')">
+                  ${aId?flagImg(aId,'flag-img-sm'):''}<span>${aName}</span>
+                </label>
+              </div>
+            </div>`:'';
+
+          return `<div class="match-row ${statusClass}" style="margin:0;padding:0.4rem 0.5rem">
+            <div style="display:flex;align-items:center;gap:0.4rem;flex:1;flex-wrap:wrap">
+              <span style="font-size:0.65rem;color:var(--gray-400);min-width:32px">P${match.mn}</span>
+              <div style="display:flex;align-items:center;gap:0.25rem;flex:1;justify-content:flex-end">
+                <span style="font-size:0.82rem;font-weight:600">${hName}</span>
+                ${hId?flagImg(hId,'flag-img'):''}
+              </div>
+              <div class="score-inputs" style="margin:0 0.3rem">
+                <input type="number" min="0" step="1" class="score-input" id="pred_${match.id}_home"
+                  value="${p.home!==undefined&&p.home!==''?p.home:''}" placeholder="0"
+                  ${locked?'disabled':''} oninput="onKoScoreInput('${match.id}')">
+                <span class="score-sep">—</span>
+                <input type="number" min="0" step="1" class="score-input" id="pred_${match.id}_away"
+                  value="${p.away!==undefined&&p.away!==''?p.away:''}" placeholder="0"
+                  ${locked?'disabled':''} oninput="onKoScoreInput('${match.id}')">
+              </div>
+              <div style="display:flex;align-items:center;gap:0.25rem;flex:1">
+                ${aId?flagImg(aId,'flag-img'):''}
+                <span style="font-size:0.82rem;font-weight:600">${aName}</span>
+              </div>
+            </div>
+            ${penSel}
+            ${bonusBadge}${scoreBadge}
+            ${r?`<span style="font-size:0.68rem;color:var(--gray-400)">✅ ${r.home}—${r.away}</span>`:''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  });
+
+  return html||`<div class="empty-state-card"><p>No hay partidos de eliminatoria disponibles aún.</p></div>`;
+}
+
+// Client-side jornada lock check (mirrors server logic)
+function isJornadaLockedClient(dateStr){
+  try{
+    const d=new Date(dateStr+'T22:00:00Z'); // assume 18:00 local → ~22:00 UTC
+    return Date.now() >= d.getTime() - 4*60*60*1000;
+  }catch(e){return false;}
+}
+
 function renderKnockoutPredictions(predData, readonly=false, isGroupsSubmitted=false, gameType='A'){
   const pred=predData||{groupMatches:{},knockoutMatches:{}};
   const results=getResults();
@@ -2810,10 +3241,29 @@ function renderKnockoutPredictions(predData, readonly=false, isGroupsSubmitted=f
 
   function isThirdSlot(slot){ return slot && slot.startsWith('3'); }
 
-  // ── R32 bracket (read-only matchups + bonus badge — no score inputs) ─
+  // ── R32 bracket (read-only matchups + bonus badge) ─────────────────
   html+=renderR32BracketFromPred(ko.roundOf32, groupPredStandings, slotAssignment, thirdsResult, getResults());
 
-  // ── Type A Knockout: use REAL bracket from admin results ────────────
+  // ── Tipo B Knockout: matchups by jornada (read-only brackets) ────────
+  if(gameType==='B'){
+    html+=renderTypeBKnockout(pred, getResults(), readonly);
+    if(!readonly){
+    html+=`<div class="save-bar" style="gap:0.75rem;flex-wrap:wrap">
+      <button class="btn btn-outline btn-lg" style="border-color:rgba(139,92,246,0.4);color:#a78bfa;cursor:not-allowed;opacity:0.7"
+        title="Próximamente — Versión Premium" onclick="showPremiumToast()">
+        👑 🤖 Sugerencia IA <span style="font-size:0.65rem;background:rgba(139,92,246,0.3);padding:1px 5px;border-radius:4px;margin-left:4px">PREMIUM</span>
+      </button>
+      <button class="btn btn-outline btn-lg" style="border-color:rgba(139,92,246,0.4);color:#a78bfa;cursor:not-allowed;opacity:0.7"
+        title="Próximamente — Versión Premium" onclick="showPremiumToast()">
+        👑 📊 Marcador estratégico <span style="font-size:0.65rem;background:rgba(139,92,246,0.3);padding:1px 5px;border-radius:4px;margin-left:4px">PREMIUM</span>
+      </button>
+      <button class="btn btn-primary btn-lg" onclick="saveKnockoutPredictions()">${t('savePredictions')}</button>
+    </div>`;
+  }
+  return html;
+}
+
+  // ── Type A Knockout: use REAL bracket from admin results ─────────────
   // Build a map: matchNumber → winner team id (from user predictions + penalty picks)
   // winner[mn] = teamId of predicted winner
   const winnerByMn = {};  // mn → teamId
@@ -2895,7 +3345,19 @@ function renderKnockoutPredictions(predData, readonly=false, isGroupsSubmitted=f
     });
   });
 
-  html+=!readonly?`<div class="save-bar"><button class="btn btn-primary btn-lg" onclick="saveKnockoutPredictions()">${t('savePredictions')}</button></div>`:'';
+  if(!readonly){
+    html+=`<div class="save-bar" style="gap:0.75rem;flex-wrap:wrap">
+      <button class="btn btn-outline btn-lg" style="border-color:rgba(139,92,246,0.4);color:#a78bfa;cursor:not-allowed;opacity:0.7"
+        title="Próximamente — Versión Premium" onclick="showPremiumToast()">
+        👑 🤖 Sugerencia IA <span style="font-size:0.65rem;background:rgba(139,92,246,0.3);padding:1px 5px;border-radius:4px;margin-left:4px">PREMIUM</span>
+      </button>
+      <button class="btn btn-outline btn-lg" style="border-color:rgba(139,92,246,0.4);color:#a78bfa;cursor:not-allowed;opacity:0.7"
+        title="A partir de 2ª ronda — Versión Premium" onclick="showPremiumToast()">
+        👑 📊 Marcador estratégico <span style="font-size:0.65rem;background:rgba(139,92,246,0.3);padding:1px 5px;border-radius:4px;margin-left:4px">PREMIUM</span>
+      </button>
+      <button class="btn btn-primary btn-lg" onclick="saveKnockoutPredictions()">${t('savePredictions')}</button>
+    </div>`;
+  }
   return html;
 }
 
@@ -3266,9 +3728,9 @@ async function renderStandings(){
 
   const standings=participants.map(p=>{
     const uid=p.userId||p.id;
-    const {total,phaseBreakdown,counts}=calcParticipantTotal(uid);
+    const {total,phaseBreakdown,counts,bracketCount}=calcParticipantTotal(uid);
     const isMe=uid===authUserId;
-    return {id:uid,name:p.username||p.name||uid,total,phaseBreakdown,counts,isMe};
+    return {id:uid,name:p.username||p.name||uid,total,phaseBreakdown,counts,bracketCount:bracketCount||0,isMe};
   }).sort((a,b)=>b.total-a.total);
 
   const filterOpts=[
@@ -3279,6 +3741,11 @@ async function renderStandings(){
     {k:'wrong',label:'❌ Fallados'},
   ];
 
+  // Free tier: show top 3 + own position; Premium: full table
+  const myPos=standings.findIndex(s=>s.isMe);
+  const freeRows=standings.filter((s,i)=>i<3||s.isMe);
+  const isPremium=false; // TODO: wire to user plan
+
   container.innerHTML=`
     <div class="section-header"><h2>🏅 ${t('standings')}</h2></div>
     ${standings.length===0?`<div class="empty-state-card"><p>${t('noParticipants')}</p></div>`:`
@@ -3287,28 +3754,65 @@ async function renderStandings(){
       ${filterOpts.map(f=>`<button class="tab-btn${f.k==='total'?' active':''}" onclick="sortStandingsBy('${f.k}',this)" data-sort="${f.k}">${f.label}</button>`).join('')}
     </div>
     <div class="table-wrapper" id="standings-table-wrap">
-      ${renderStandingsTable(standings,'total')}
+      ${renderStandingsTable(isPremium?standings:freeRows,'total',myPos,standings.length,isPremium)}
     </div>
+    ${!isPremium&&standings.length>4?`<div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:8px;padding:0.6rem 1rem;margin-top:0.75rem;font-size:0.82rem;color:#a78bfa;display:flex;align-items:center;gap:0.5rem">
+      👑 <span><strong>Premium</strong> — Ver la tabla completa de ${standings.length} participantes</span>
+    </div>`:''}
 
     <div style="margin-top:1.5rem">
-      <h3 style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:1px;margin-bottom:0.75rem">📋 ${t('allPredictions')}</h3>
-      <div class="participant-selector-bar">
-        <label>${t('selectParticipant')}:</label>
-        <select class="form-select" onchange="showParticipantDetail(this.value)">
-          <option value="">— ${t('selectParticipant')} —</option>
-          ${participants.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
-        </select>
+      <h3 style="font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;font-weight:700;letter-spacing:1px;margin-bottom:0.75rem">🔍 Ver pronósticos por participante</h3>
+      <div style="position:relative;margin-bottom:0.75rem">
+        <input type="text" id="participant-search" class="form-input" placeholder="🔍 Buscar participante..."
+          oninput="filterParticipantSearch(this.value)"
+          style="padding-right:2.5rem">
+        <div id="participant-search-results" style="position:absolute;top:100%;left:0;right:0;background:var(--card-bg);border:1px solid rgba(255,255,255,0.1);border-radius:8px;z-index:100;max-height:200px;overflow-y:auto;display:none"></div>
       </div>
       <div id="participant-detail"></div>
     </div>
     `}
   `;
 
-  // Store standings globally for sorting
+  // Store data globally for sorting
   window._standingsData=standings;
+  window._standingsParticipants=participants;
+  window._standingsIsPremium=isPremium;
 }
 
-function renderStandingsTable(standings,sortBy){
+function filterParticipantSearch(query){
+  const participants=window._standingsParticipants||[];
+  const resultsEl=document.getElementById('participant-search-results');
+  if(!resultsEl) return;
+  if(!query.trim()){resultsEl.style.display='none';return;}
+  const q=query.toLowerCase();
+  const matches=participants.filter(p=>(p.username||p.name||'').toLowerCase().includes(q));
+  if(matches.length===0){resultsEl.style.display='none';return;}
+  resultsEl.style.display='block';
+  resultsEl.innerHTML=matches.slice(0,8).map(p=>{
+    const uid=p.userId||p.id;
+    const nm=p.username||p.name||'';
+    const ini=(nm||'?')[0].toUpperCase();
+    return `<div data-uid="${uid}" data-nm="${nm.replace(/"/g,'&quot;')}"
+      class="search-result-item"
+      style="padding:0.5rem 0.75rem;cursor:pointer;display:flex;align-items:center;gap:0.5rem;border-bottom:1px solid rgba(255,255,255,0.05)">
+      <span class="avatar-sm" style="width:24px;height:24px;font-size:0.7rem">${ini}</span>
+      <span>${nm}</span>
+    </div>`;
+  }).join('');
+  resultsEl.querySelectorAll('.search-result-item').forEach(el=>{
+    el.addEventListener('click',()=>selectParticipantFromSearch(el.dataset.uid,el.dataset.nm));
+    el.addEventListener('mouseover',()=>{el.style.background='rgba(255,255,255,0.06)';});
+    el.addEventListener('mouseout',()=>{el.style.background='';});
+  });
+}
+
+function selectParticipantFromSearch(pid, name){
+  document.getElementById('participant-search').value=name;
+  document.getElementById('participant-search-results').style.display='none';
+  showParticipantDetail(pid);
+}
+
+function renderStandingsTable(standings,sortBy,myRealPos=-1,totalCount=0,isPremium=false){
   const sorted=[...standings].sort((a,b)=>{
     if(sortBy==='total') return b.total-a.total;
     if(sortBy==='exact') return b.counts.exact-a.counts.exact;
@@ -3317,6 +3821,28 @@ function renderStandingsTable(standings,sortBy){
     if(sortBy==='wrong') return b.counts.wrong-a.counts.wrong;
     return b.total-a.total;
   });
+
+  const rows=sorted.map((s,i)=>{
+    const isMe=s.isMe||s.id===authUserId;
+    // If showing limited (free) rows, show real rank position
+    const rankPos=!isPremium&&myRealPos>=0&&isMe?myRealPos+1:i+1;
+    const medal=rankPos===1?'🥇':rankPos===2?'🥈':rankPos===3?'🥉':rankPos;
+    const rowClass=rankPos===1?'gold':rankPos===2?'silver':rankPos===3?'bronze':'';
+    return `<tr class="${rowClass}" style="${isMe?'outline:1px solid rgba(34,197,94,0.4);background:rgba(34,197,94,0.05)':''}">
+      <td class="rank-cell">${medal}</td>
+      <td><div class="name-cell">
+        <span class="avatar-sm" style="${isMe?'background:linear-gradient(135deg,var(--gold),#d97706);color:var(--dark)':''}">${s.name.charAt(0).toUpperCase()}</span>
+        ${s.name}${isMe?` <span style="color:var(--green-light);font-size:0.7rem">(tú)</span>`:''}
+      </div></td>
+      <td style="color:var(--exact-color);font-weight:700">${s.counts.exact}</td>
+      <td style="color:var(--result-goals-color);font-weight:700">${s.counts.resultAndGoals}</td>
+      <td style="color:var(--result-only-color);font-weight:700">${s.counts.resultOnly}</td>
+      <td style="color:var(--wrong-color)">${s.counts.wrong}</td>
+      <td style="color:#60a5fa;font-weight:700" title="Llaves acertadas">${s.bracketCount||0}</td>
+      <td class="total-cell"><strong>${s.total}</strong></td>
+    </tr>`;
+  }).join('');
+
   return `<table class="standings-table">
     <thead>
       <tr>
@@ -3326,27 +3852,11 @@ function renderStandingsTable(standings,sortBy){
         <th title="Resultado + Goles">🔵 Res+Gol</th>
         <th title="Solo Resultado">🟡 Solo Res</th>
         <th title="Sin puntos">❌ Nada</th>
+        <th title="Llaves Acertadas" style="color:#60a5fa">🔑 Llaves</th>
         <th>${t('totalPoints')}</th>
       </tr>
     </thead>
-    <tbody>
-      ${sorted.map((s,i)=>{
-        const isMe=s.id===authUserId;
-        return `
-        <tr class="${i===0?'gold':i===1?'silver':i===2?'bronze':''}" style="${isMe?'outline:1px solid rgba(34,197,94,0.4);background:rgba(34,197,94,0.05)':''}">
-          <td class="rank-cell">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>
-          <td><div class="name-cell">
-            <span class="avatar-sm" style="${isMe?'background:linear-gradient(135deg,var(--gold),#d97706);color:var(--dark)':''}">${s.name.charAt(0).toUpperCase()}</span>
-            ${s.name}${isMe?' <span style="color:var(--green-light);font-size:0.7rem">(tú)</span>':''}
-          </div></td>
-          <td style="color:var(--exact-color);font-weight:700">${s.counts.exact}</td>
-          <td style="color:var(--result-goals-color);font-weight:700">${s.counts.resultAndGoals}</td>
-          <td style="color:var(--result-only-color);font-weight:700">${s.counts.resultOnly}</td>
-          <td style="color:var(--wrong-color)">${s.counts.wrong}</td>
-          <td class="total-cell"><strong>${s.total}</strong></td>
-        </tr>`;
-      }).join('')}
-    </tbody>
+    <tbody>${rows}</tbody>
   </table>`;
 }
 
@@ -3354,7 +3864,12 @@ function sortStandingsBy(key,btn){
   document.querySelectorAll('[data-sort]').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(window._standingsData){
-    document.getElementById('standings-table-wrap').innerHTML=renderStandingsTable(window._standingsData,key);
+    const data=window._standingsData;
+    const isPremium=window._standingsIsPremium||false;
+    const myPos=data.findIndex(s=>s.isMe||s.id===authUserId);
+    const freeRows=data.filter((s,i)=>i<3||s.isMe||s.id===authUserId);
+    document.getElementById('standings-table-wrap').innerHTML=
+      renderStandingsTable(isPremium?data:freeRows,key,myPos,data.length,isPremium);
   }
 }
 
@@ -3402,95 +3917,246 @@ function renderRules(){
   const r=getGameScoringRules();
   const game=currentGame();
   const isOwner=game?.isOwner||false;
+  const isPremium=false; // TODO: wire to plan
 
-  // Build phase rows matching the scoring image exactly
+  // ── Scoring table ─────────────────────────────────────────────────
   const phases=[
-    {label:t('firstPhase'), key:'groupStage', rules:r.groupStage,
-     extra:[]},
-    {label:'16avos',        key:'roundOf32',  rules:r.roundOf32,
-     extra:[{label:'🔑 '+t('correctBracketBonus'), val:r.roundOf32.correctBracketBonus, color:'var(--green-light)'}]},
-    {label:t('octavos'),    key:'quarterFinals', rules:r.quarterFinals,
-     extra:[{label:'🔑 '+t('correctBracketBonus'), val:r.quarterFinals.correctBracketBonus, color:'var(--green-light)'}]},
-    {label:t('cuartos'),    key:'cuartos',    rules:r.cuartos||r.quarterFinals,
-     extra:[{label:'🔑 '+t('correctBracketBonus'), val:(r.cuartos||r.quarterFinals).correctBracketBonus, color:'var(--green-light)'}]},
-    {label:t('semiFinal'),  key:'semiFinals', rules:r.semiFinals,
+    {label:'Primera Fase',   key:'groupStage',    rules:r.groupStage,
+     extra:[{label:'🔑 Bonif. llave acertada (16avos)', val:r.groupStage.correctBracketBonus||5, color:'var(--green-light)'}]},
+    {label:'16avos de Final',key:'roundOf32',     rules:r.roundOf32,
+     extra:[{label:'🔑 Bonif. llave acertada', val:r.roundOf32.correctBracketBonus||3, color:'var(--green-light)'}]},
+    {label:'Octavos de Final',key:'quarterFinals',rules:r.quarterFinals,
+     extra:[{label:'🔑 Bonif. llave acertada', val:r.quarterFinals.correctBracketBonus||5, color:'var(--green-light)'}]},
+    {label:'Cuartos de Final',key:'cuartos',      rules:r.cuartos||r.quarterFinals,
+     extra:[{label:'🔑 Bonif. llave acertada', val:(r.cuartos||r.quarterFinals).correctBracketBonus||5, color:'var(--green-light)'}]},
+    {label:'Semifinales',    key:'semiFinals',    rules:r.semiFinals,
      extra:[
-       {label:'🏅 Bonif. acertar 3º/4º',   val:r.semiFinals.thirdPlaceBonus||0, color:'#60a5fa'},
-       {label:'🏆 Bonif. acertar la Final', val:r.semiFinals.finalBonus||0,      color:'var(--gold)'},
+       {label:'🏅 Bonif. acertar 3er/4to lugar', val:r.semiFinals.thirdPlaceBonus||7,  color:'#60a5fa'},
+       {label:'🏆 Bonif. acertar la Final',       val:r.semiFinals.finalBonus||15,     color:'var(--gold)'},
      ]},
-    {label:t('terceroCuarto'), key:'thirdPlace', rules:r.thirdPlace, extra:[]},
-    {label:t('finalMatch'),    key:'final',      rules:r.final,      extra:[]},
+    {label:'3er y 4to Lugar',key:'thirdPlace',   rules:r.thirdPlace, extra:[]},
+    {label:'Final',          key:'final',         rules:r.final,      extra:[]},
   ];
+
+  function editInput(key,field,val){
+    if(!isOwner||!isPremium) return '';
+    return `<input type="number" class="rules-edit-input" min="0" max="99" value="${val}"
+      onchange="updateGameRule('${key}','${field}',this.value)" title="Editar (Premium)">`;
+  }
 
   const phaseRows=phases.map(phase=>{
     const rowCount=3+phase.extra.length;
     const rows=[];
     rows.push(`<tr class="phase-header-row">
       <td rowspan="${rowCount}" class="phase-cell">${phase.label}</td>
-      <td>${t('exactScore')}</td>
-      <td class="pts-cell">${phase.rules.exactScore}${isOwner?`<input type="number" class="rules-edit-input" min="0" max="99" value="${phase.rules.exactScore}" onchange="updateGameRule('${phase.key}','exactScore',this.value)" title="Editar">`:''}</td>
+      <td>Resultado con marcador (exacto)</td>
+      <td class="pts-cell">${phase.rules.exactScore}${editInput(phase.key,'exactScore',phase.rules.exactScore)}</td>
     </tr>`);
-    rows.push(`<tr><td>${t('resultAndGoals')}</td>
-      <td class="pts-cell">${phase.rules.resultAndGoals}${isOwner?`<input type="number" class="rules-edit-input" min="0" max="99" value="${phase.rules.resultAndGoals}" onchange="updateGameRule('${phase.key}','resultAndGoals',this.value)" title="Editar">`:''}</td>
-    </tr>`);
-    rows.push(`<tr><td>${t('resultOnly')}</td>
-      <td class="pts-cell">${phase.rules.resultOnly}${isOwner?`<input type="number" class="rules-edit-input" min="0" max="99" value="${phase.rules.resultOnly}" onchange="updateGameRule('${phase.key}','resultOnly',this.value)" title="Editar">`:''}</td>
-    </tr>`);
+    rows.push(`<tr><td>Resultado y # de goles de uno de los equipos</td>
+      <td class="pts-cell">${phase.rules.resultAndGoals}${editInput(phase.key,'resultAndGoals',phase.rules.resultAndGoals)}</td></tr>`);
+    rows.push(`<tr><td>Resultado sin marcador</td>
+      <td class="pts-cell">${phase.rules.resultOnly}${editInput(phase.key,'resultOnly',phase.rules.resultOnly)}</td></tr>`);
     phase.extra.forEach(ex=>{
       rows.push(`<tr><td>${ex.label}</td>
-        <td class="pts-cell" style="color:${ex.color}">${ex.val}${isOwner?`<input type="number" class="rules-edit-input" min="0" max="99" value="${ex.val}" title="Editar">`:''}</td>
-      </tr>`);
+        <td class="pts-cell" style="color:${ex.color}">${ex.val}${editInput(phase.key,'bonus',ex.val)}</td></tr>`);
     });
     return rows.join('');
   }).join('');
 
+  const ownerBanner = isOwner&&isPremium
+    ? `<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:var(--gold)">
+        👑 Como creador Premium puedes personalizar los puntos. Los cambios aplican a todos.
+        <button class="btn btn-sm btn-gold" style="margin-left:0.5rem" onclick="resetScoringRules()">↺ Restablecer</button>
+       </div>`
+    : isOwner&&!isPremium
+    ? `<div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.25);border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:#a78bfa">
+        👑 Como creador puedes personalizar los puntos con la versión <strong>Premium</strong>.
+       </div>`
+    : '';
+
   container.innerHTML=`
-    <div class="section-header"><h2>📋 ${t('rules')}</h2></div>
-    ${isOwner?`<div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:0.6rem 1rem;margin-bottom:1rem;font-size:0.82rem;color:var(--gold)">
-      👑 Como creador de la partida puedes personalizar los puntos. Los cambios se aplican a todos los participantes.
-      <button class="btn btn-sm btn-gold" style="margin-left:0.5rem" onclick="resetScoringRules()">↺ Restablecer por defecto</button>
-    </div>`:''}
-    <div class="card" style="margin-bottom:1.25rem">
-      <div class="card-header"><h3>⚽ ${t('rulesTitle')}</h3></div>
-      <div class="table-wrapper">
-        <table class="rules-table">
-          <thead><tr><th>${t('phase')}</th><th>${t('condition')}</th><th>${t('points')}</th></tr></thead>
-          <tbody>${phaseRows}</tbody>
-        </table>
+    <div class="section-header"><h2>📋 Reglamento</h2></div>
+
+    <!-- ═══ 1. QUÉ ES LA APP ═══ -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-header"><h3>⚽ 1. ¿Qué es Quiniela Mundial 2026?</h3></div>
+      <div class="card-body" style="font-size:0.87rem;color:var(--gray-300);line-height:1.7">
+        <p>Es una aplicación de quiniela deportiva diseñada para que disfrutes el
+        <strong style="color:var(--gold)">FIFA World Cup 2026</strong> (48 equipos · 104 partidos · 12 grupos, celebrado en
+        Canadá, EE.UU. y México del 11 jun al 19 jul de 2026) en compañía de tus amigos y/o familiares.</p>
+        <p style="margin-top:0.6rem"><strong>¿Cómo se juega?</strong> Creas o te unes a una <em>partida</em>,
+        pronosticas los resultados de los partidos antes de que se jueguen, y acumulas puntos según qué tan
+        cerca estuvo tu pronóstico del resultado real. Al final gana quien tenga más puntos.</p>
+        <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.65rem 0.9rem;margin-top:0.75rem;font-size:0.82rem;color:#fca5a5">
+          🚫 <strong>No es una app de apuestas.</strong> No se intercambia dinero real en la plataforma. Jugar es completamente
+          gratis en la versión Free. Si tú y tus amigos quieren acordar un premio entre ustedes (una cena, una camiseta…),
+          eso es un acuerdo personal que no involucra a esta aplicación.
+        </div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-header"><h3>📖 ${t('howItWorks')}</h3></div>
+
+    <!-- ═══ 2. ¿QUÉ RESULTADO SE TOMA? ═══ -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-header"><h3>⏱️ 2. ¿Qué resultado se toma como oficial?</h3></div>
+      <div class="card-body" style="font-size:0.87rem;color:var(--gray-300);line-height:1.7">
+        <ul style="padding-left:1.2rem;margin:0;display:flex;flex-direction:column;gap:0.4rem">
+          <li>Se toma el <strong>marcador al final de los 90 minutos</strong> reglamentarios (más tiempo de descuento).</li>
+          <li>Si el partido va a <strong>tiempo extra (prórroga / alargue)</strong>, se toma el marcador al final de los
+              120 minutos. <em>Los goles en prórroga sí cuentan para el pronóstico.</em></li>
+          <li><strong>Los penales NO cuentan</strong> para el resultado del pronóstico. Si el partido termina 1-1 y se
+              define por penales, el resultado oficial para la quiniela es <strong>1-1</strong>.</li>
+          <li>Sin embargo, en la sección de Eliminatorias (Tipo A) se te pedirá que escojas
+              <em>quién avanza</em> cuando pronostiques un empate — ese dato se usa para calcular
+              la <strong>bonificación de llave</strong>.</li>
+          <li>Los resultados oficiales los ingresa el <strong>Admin</strong> de cada torneo después de cada partido.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ═══ 3. TABLA DE PUNTUACIÓN ═══ -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-header">
+        <h3>🏅 3. Tabla de puntuación</h3>
+        ${isOwner?`<span style="font-size:0.72rem;color:${isPremium?'var(--gold)':'#a78bfa'}">
+          ${isPremium?'👑 Premium — edita los pts':'👑 Personalizable con Premium'}</span>`:''}
+      </div>
       <div class="card-body">
-        <div class="explanation-grid">
-          <div class="explanation-item exact">
-            <span class="ex-badge">${r.groupStage.exactScore} pts</span>
-            <div><strong>${t('exactScore')}</strong><p>Ej: Pronosticaste 2-1 y el resultado fue 2-1</p></div>
-          </div>
-          <div class="explanation-item result-goals">
-            <span class="ex-badge">${r.groupStage.resultAndGoals} pts</span>
-            <div><strong>${t('resultAndGoals')}</strong><p>Ej: Pronosticaste 2-0 y fue 2-1 (mismo ganador + goles de uno)</p></div>
-          </div>
-          <div class="explanation-item result-only">
-            <span class="ex-badge">${r.groupStage.resultOnly} pts</span>
-            <div><strong>${t('resultOnly')}</strong><p>Ej: Pronosticaste 2-0 y fue 3-1 (solo acertaste el ganador)</p></div>
-          </div>
-          <div class="explanation-item wrong">
-            <span class="ex-badge">0 pts</span>
-            <div><strong>Incorrecto</strong><p>El resultado fue diferente al pronosticado</p></div>
+        ${ownerBanner}
+        <div class="table-wrapper">
+          <table class="rules-table">
+            <thead><tr><th>Fase</th><th>Condición</th><th>Puntos</th></tr></thead>
+            <tbody>${phaseRows}</tbody>
+          </table>
+        </div>
+        <!-- Equipo candidato al título y equipo sorpresa -->
+        <div style="margin-top:1rem;padding:0.75rem 0.9rem;background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:8px">
+          <div style="font-weight:700;color:var(--gold);margin-bottom:0.4rem">🏆 Candidato al Título &amp; 🌟 Equipo Sorpresa</div>
+          <div style="font-size:0.83rem;color:var(--gray-300);line-height:1.6">
+            Al momento de crear la partida, el creador puede definir un <strong>Equipo Candidato al Título</strong>
+            y un <strong>Equipo Sorpresa</strong>. Cada participante gana <strong>+5 pts</strong> por
+            cada ronda que ese equipo avance (configurable, solo Premium puede modificar los puntos).
+            Esta opción solo se habilita en el momento de crear la partida.
+            ${isOwner&&!game?`<div style="margin-top:0.5rem;font-size:0.78rem;color:var(--gray-400)">
+              (Configura esto al crear tu próxima partida)</div>`:''}
           </div>
         </div>
       </div>
     </div>
-  `;
-}
 
-function updateGameRule(phase, field, value){
-  const game=currentGame(); if(!game) return;
-  if(!game.scoringRules) game.scoringRules=JSON.parse(JSON.stringify(DEFAULT_SCORING_RULES));
-  if(!game.scoringRules[phase]) game.scoringRules[phase]={...DEFAULT_SCORING_RULES[phase]};
-  game.scoringRules[phase][field]=parseInt(value)||0;
-  // TODO: persist to server when scoring rules API is added
+    <!-- ═══ 4. QUÉ VAS A VER EN CADA PESTAÑA ═══ -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-header"><h3>🗂️ 4. ¿Qué hay en cada sección?</h3></div>
+      <div class="card-body" style="font-size:0.87rem;color:var(--gray-300)">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.75rem">
+          ${[
+            {icon:'🏠',tab:'Inicio',      desc:'Presentación de la app, resumen del juego activo, mini-clasificación y accesos rápidos.'},
+            {icon:'🎮',tab:'Mis Partidas',desc:'Crea o únete a partidas. Gestiona las partidas donde eres admin o participante. Comparte el código o QR de invitación.'},
+            {icon:'⚽',tab:'Pronósticos', desc:'Ingresa tus predicciones de marcadores. Tipo A: todos los grupos de una vez + eliminatoria real. Tipo B: jornada a jornada con bloqueo automático.'},
+            {icon:'📊',tab:'Resultados',  desc:'Consulta los resultados oficiales ingresados por el admin, las tablas de posiciones reales y los emparejamientos de eliminatoria.'},
+            {icon:'🏅',tab:'Clasificación',desc:'Ranking de participantes con puntos, marcadores exactos, llaves acertadas y más. Versión Free: Top 3 + tu posición. Premium: tabla completa.'},
+            {icon:'📋',tab:'Reglamento',  desc:'Esta sección — reglas completas, tabla de puntuación y explicación de cada modo de juego.'},
+            {icon:'⚙️',tab:'Admin',       desc:'Solo visible para el admin del torneo. Permite ingresar los resultados oficiales de grupos y eliminatoria.'},
+          ].map(s=>`<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:0.6rem 0.75rem">
+            <div style="font-size:1.1rem;margin-bottom:0.3rem">${s.icon} <strong style="color:var(--white)">${s.tab}</strong></div>
+            <div style="font-size:0.8rem;color:var(--gray-400)">${s.desc}</div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 5. PARTIDAS Y TIPOS DE JUEGO ═══ -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-header"><h3>🎮 5. Partidas y tipos de juego</h3></div>
+      <div class="card-body" style="font-size:0.87rem;color:var(--gray-300);line-height:1.7">
+        <p>Una <strong>partida</strong> es un grupo privado de jugadores que compiten entre sí. Cada partida tiene un
+        creador (admin) que la configura y comparte el código/QR de invitación. Puedes pertenecer a múltiples partidas
+        simultáneamente.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-top:0.75rem">
+          <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.25);border-radius:8px;padding:0.65rem 0.85rem">
+            <div style="font-weight:700;color:var(--gold);margin-bottom:0.3rem">📋 Tipo A — Completo</div>
+            <ul style="padding-left:1rem;margin:0;font-size:0.82rem;display:flex;flex-direction:column;gap:0.3rem">
+              <li>Pronosticas <strong>todos los grupos</strong> de una sola vez antes de que inicie el torneo.</li>
+              <li>Al enviar grupos, se generan automáticamente tus <strong>mejores terceros</strong> y los emparejamientos de 16avos.</li>
+              <li>La <strong>eliminatoria</strong> se activa cuando el admin termine de ingresar todos los resultados de la fase de grupos.</li>
+              <li>En eliminatoria vas eligiendo ganadores — si hay empate, indicas quién avanza por penales.</li>
+              <li>Botón de <strong>llenado aleatorio</strong> disponible.</li>
+            </ul>
+          </div>
+          <div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.3);border-radius:8px;padding:0.65rem 0.85rem">
+            <div style="font-weight:700;color:#60a5fa;margin-bottom:0.3rem">📅 Tipo B — Por Jornada</div>
+            <ul style="padding-left:1rem;margin:0;font-size:0.82rem;display:flex;flex-direction:column;gap:0.3rem">
+              <li>Pronosticas <strong>jornada a jornada</strong>, a medida que avanza el torneo.</li>
+              <li>Cada fecha se <strong>bloquea automáticamente</strong> 4 horas antes del primer partido.</li>
+              <li>La tabla de mejores terceros y emparejamientos se forma en tiempo real.</li>
+              <li>La eliminatoria también se juega por jornada conforme se vayan definiendo los cruces.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Premium advantages -->
+        <div style="margin-top:0.9rem;background:rgba(139,92,246,0.07);border:1px solid rgba(139,92,246,0.25);border-radius:8px;padding:0.65rem 0.85rem">
+          <div style="font-weight:700;color:#a78bfa;margin-bottom:0.4rem">👑 Ventajas Premium</div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.4rem;font-size:0.82rem">
+            ${[
+              '🤖 Sugerencia de pronóstico por IA (estadísticas y enfrentamientos históricos)',
+              '📊 Tabla de clasificación completa (todos los participantes)',
+              '🎯 Marcador estratégico: sugiere un resultado que maximiza tu ventaja sobre los rivales',
+              '✏️ Personalización de puntos para creadores de partida',
+              '🔍 Búsqueda avanzada de participantes',
+              '🏆 Multitorneo: Copa América, Eurocopa, Copa África, Copa Asia, Copa de Oro',
+            ].map(f=>`<div style="background:rgba(139,92,246,0.08);border-radius:6px;padding:0.4rem 0.6rem">${f}</div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 6. PREMIOS Y ACLARACIONES ═══ -->
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-header"><h3>🎉 6. Premios y aclaraciones importantes</h3></div>
+      <div class="card-body" style="font-size:0.87rem;color:var(--gray-300);line-height:1.7;display:flex;flex-direction:column;gap:0.6rem">
+        <div style="background:rgba(34,197,94,0.07);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:0.6rem 0.85rem">
+          ✅ <strong>Esta aplicación está diseñada para divertirse</strong> entre amigos y/o familiares durante el torneo.
+          No otorga premios en dinero ni en especie. Si los participantes de una partida quieren acordar un premio
+          simbólico entre ellos (una cena, una camiseta, etc.), ese es un acuerdo <em>completamente personal y externo</em>
+          a la plataforma.
+        </div>
+        <div style="background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:8px;padding:0.6rem 0.85rem">
+          🚫 <strong>No es una app de apuestas.</strong> No se realiza ninguna transacción económica dentro de la plataforma.
+          Jugar es <strong>gratis en la versión Free</strong>. La versión Premium ofrece funciones adicionales.
+        </div>
+        <div style="background:rgba(59,130,246,0.07);border:1px solid rgba(59,130,246,0.2);border-radius:8px;padding:0.6rem 0.85rem">
+          🔒 Tus datos (pronósticos, nombre de usuario, correo) se almacenan de forma segura en el servidor y
+          <strong>no se comparten con terceros</strong>. El correo electrónico solo se usa para recuperación de cuenta.
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 7. MULTITORNEO — PREMIUM ═══ -->
+    <div class="card" style="margin-bottom:1rem;border-color:rgba(139,92,246,0.3)">
+      <div class="card-header"><h3 style="color:#a78bfa">👑 7. Multitorneo — Versión Premium</h3></div>
+      <div class="card-body" style="font-size:0.87rem;color:var(--gray-300);line-height:1.7">
+        <p>Con la versión Premium podrás usar esta misma aplicación para otros torneos de selecciones nacionales:</p>
+        <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.6rem">
+          ${[
+            {flag:'🌎',name:'Copa América',    desc:'Conmebol · 16 selecciones'},
+            {flag:'🌍',name:'Copa África (AFCON)',desc:'CAF · 24 selecciones'},
+            {flag:'🌍',name:'Eurocopa (UEFA Euro)',desc:'UEFA · 24 selecciones'},
+            {flag:'🌏',name:'Copa Asia (AFC)',  desc:'AFC · 24 selecciones'},
+            {flag:'🌎',name:'Copa de Oro (CONCACAF)',desc:'CONCACAF · 16 selecciones'},
+          ].map(t=>`<div style="background:rgba(139,92,246,0.08);border:1px solid rgba(139,92,246,0.2);border-radius:8px;padding:0.5rem 0.75rem;min-width:160px">
+            <div style="font-size:1.1rem">${t.flag}</div>
+            <div style="font-weight:700;color:#a78bfa;font-size:0.85rem">${t.name}</div>
+            <div style="font-size:0.75rem;color:var(--gray-400)">${t.desc}</div>
+          </div>`).join('')}
+        </div>
+        <p style="margin-top:0.75rem;font-size:0.82rem;color:var(--gray-400)">
+          Próximamente disponible. El funcionamiento será idéntico al Mundial — mismos modos Tipo A y B,
+          misma tabla de puntuación personalizable y todas las ventajas Premium.
+        </p>
+      </div>
+    </div>
+  `;
 }
 
 function resetScoringRules(){
@@ -4086,14 +4752,15 @@ function renderBestThirdsPanel(thirds){
 }
 
 async function init(){
-  // Mostrar pantalla de carga
-  document.getElementById('view-home').innerHTML=`
-    <div style="text-align:center;padding:4rem 1rem;color:var(--gray-400)">
-      <div style="font-size:3rem;margin-bottom:1rem">⚽</div>
-      <div style="font-size:1rem">Cargando datos...</div>
-    </div>`;
+  // Mostrar pantalla de carga dentro de home-content (preserva el div)
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-home').classList.add('active');
+  const hc=document.getElementById('home-content');
+  if(hc) hc.innerHTML=`
+    <div style="text-align:center;padding:6rem 1rem;color:var(--gray-400)">
+      <div style="font-size:3.5rem;margin-bottom:1rem;animation:spin 1.5s linear infinite;display:inline-block">⚽</div>
+      <div style="font-size:1rem;margin-top:0.5rem">Cargando datos...</div>
+    </div>`;
 
   await loadData();
 
@@ -4113,6 +4780,15 @@ async function init(){
   document.addEventListener('input', e=>{
     if(e.target.classList.contains('score-input') || e.target.classList.contains('admin-score-input')){
       validateScoreInput(e.target);
+    }
+  });
+
+  // Close participant search dropdown when clicking outside
+  document.addEventListener('click', e=>{
+    const res=document.getElementById('participant-search-results');
+    const inp=document.getElementById('participant-search');
+    if(res&&inp&&!inp.contains(e.target)&&!res.contains(e.target)){
+      res.style.display='none';
     }
   });
 
