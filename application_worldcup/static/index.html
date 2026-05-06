@@ -712,6 +712,14 @@ const TRANSLATIONS = {
     missingPredictions:'pronóstico(s) por completar', lockedByJornada2:'partido(s) ya bloqueados por jornada',
     onlyOwnPredictions:'Solo puedes guardar tus propios pronósticos',
     groupsAlreadySubmitted:'Ya enviaste tus pronósticos de grupos',
+    eliminated:'Eliminado', qualifiedQ:'Clasificado', bestThird:'Mejor Tercero',
+    notQualified:'No clasifica', r32Matchups:'Emparejamientos 16avos de Final',
+    noSession:'Debes iniciar sesión para ver tus partidas',
+    aboutGame:'¿Qué es la aplicación?', modesTitle:'Modos de juego',
+    groupsTitle:'Partidas y grupos', premiumTitle:'Versión Premium',
+    loginRegister:'Iniciar Sesión / Registrarse',
+    howToPlay:'Cómo jugar', officialResult:'Resultado oficial',
+    penaltyWinnerLabel:'¿Quién avanza por penales?',
   },
   fr: {
     navHome:'Accueil', navPartidas:'Parties', navPredictions:'Pronostics',
@@ -778,6 +786,14 @@ const TRANSLATIONS = {
     missingPredictions:'pronostic(s) manquants', lockedByJornada2:'match(s) déjà bloqués',
     onlyOwnPredictions:'Vous ne pouvez sauvegarder que vos propres pronostics',
     groupsAlreadySubmitted:'Vous avez déjà soumis vos pronostics de groupes',
+    eliminated:'Éliminé', qualifiedQ:'Qualifié', bestThird:'Meilleur 3e',
+    notQualified:'Non qualifié', r32Matchups:'Matchs des 16es de Finale',
+    noSession:'Connectez-vous pour voir vos parties',
+    aboutGame:"Qu'est-ce que l'application?", modesTitle:'Modes de jeu',
+    groupsTitle:'Parties et groupes', premiumTitle:'Version Premium',
+    loginRegister:"Se Connecter / S'inscrire",
+    howToPlay:'Comment jouer', officialResult:'Résultat officiel',
+    penaltyWinnerLabel:'Qui avance aux tirs au but?',
   },
   en: {
     navHome:'Home', navPartidas:'Games', navPredictions:'Predictions',
@@ -844,6 +860,14 @@ const TRANSLATIONS = {
     missingPredictions:'prediction(s) missing', lockedByJornada2:'match(s) already locked by matchday',
     onlyOwnPredictions:'You can only save your own predictions',
     groupsAlreadySubmitted:'You already submitted your group predictions',
+    eliminated:'Eliminated', qualifiedQ:'Qualified', bestThird:'Best 3rd',
+    notQualified:'Not qualified', r32Matchups:'Round of 32 Matchups',
+    noSession:'Please sign in to see your games',
+    aboutGame:'What is the app?', modesTitle:'Game modes',
+    groupsTitle:'Games and groups', premiumTitle:'Premium Version',
+    loginRegister:'Sign In / Register',
+    howToPlay:'How to play', officialResult:'Official result',
+    penaltyWinnerLabel:'Who advances on penalties?',
   }
 };
 
@@ -1757,58 +1781,59 @@ function renderHome(){
 
       <div class="card" style="border-color:rgba(245,158,11,0.3)">
         <div class="card-header" style="padding-bottom:0.5rem">
-          <h3 style="color:var(--gold)">⚽ ¿De qué se trata?</h3>
+          <h3 style="color:var(--gold)">⚽ ${t('aboutGame')}</h3>
         </div>
         <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
-          Pronostica los resultados del Mundial 2026 (48 equipos · 104 partidos · 12 grupos) y compite
-          con amigos en tu propia quiniela privada. Ganas puntos por marcadores exactos, resultados
-          correctos y por acertar las llaves de eliminatoria.
-          <div style="margin-top:0.5rem"><a onclick="showView('rules')" style="color:var(--gold);cursor:pointer;font-size:0.8rem">Ver reglamento completo →</a></div>
+          ${currentLang==='fr'
+            ? `Pronostique les résultats de la Coupe du Monde 2026 (48 équipes · 104 matchs · 12 groupes) et rivalisez avec vos amis dans votre propre quinela privée. Vous gagnez des points pour les scores exacts, les résultats corrects et pour deviner les tableaux éliminatoires.`
+            : currentLang==='en'
+            ? `Predict the results of the 2026 World Cup (48 teams · 104 matches · 12 groups) and compete with friends in your own private pool. You earn points for exact scores, correct results, and for nailing the knockout brackets.`
+            : `Pronostica los resultados del Mundial 2026 (48 equipos · 104 partidos · 12 grupos) y compite con amigos en tu propia quiniela privada. Ganas puntos por marcadores exactos, resultados correctos y por acertar las llaves de eliminatoria.`}
+          <div style="margin-top:0.5rem"><a onclick="showView('rules')" style="color:var(--gold);cursor:pointer;font-size:0.8rem">${currentLang==='fr'?'Voir le règlement complet →':currentLang==='en'?'See full rules →':'Ver reglamento completo →'}</a></div>
         </div>
       </div>
 
       <div class="card" style="border-color:rgba(59,130,246,0.3)">
         <div class="card-header" style="padding-bottom:0.5rem">
-          <h3 style="color:#60a5fa">🎮 Modos de juego</h3>
+          <h3 style="color:#60a5fa">🎮 ${t('modesTitle')}</h3>
         </div>
         <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
           <div style="margin-bottom:0.5rem">
-            <span style="color:var(--gold);font-weight:700">📋 Tipo A — Completo</span><br>
-            Pronosticas todos los partidos de grupos de una sola vez antes de que inicie el torneo.
-            La eliminatoria se activa cuando el admin finalice la fase de grupos con los equipos reales clasificados.
+            <span style="color:var(--gold);font-weight:700">📋 ${t('typeAGame')}</span><br>
+            ${t('typeADesc')}
           </div>
           <div>
-            <span style="color:#60a5fa;font-weight:700">📅 Tipo B — Por Jornada</span><br>
-            Pronosticas jornada a jornada. Cada fecha se bloquea 4 horas antes del primer partido.
-            Ideal para quien quiere seguir el torneo partido a partido.
+            <span style="color:#60a5fa;font-weight:700">📅 ${t('typeBGame')}</span><br>
+            ${t('typeBDesc')}
           </div>
         </div>
       </div>
 
       <div class="card" style="border-color:rgba(34,197,94,0.3)">
         <div class="card-header" style="padding-bottom:0.5rem">
-          <h3 style="color:var(--green-light)">👥 Partidas y grupos</h3>
+          <h3 style="color:var(--green-light)">👥 ${t('groupsTitle')}</h3>
         </div>
         <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
-          Crea una partida, elige el tipo de juego y comparte el <strong>código</strong> o
-          <strong>QR</strong> con tus amigos para que se unan. Tú eres el admin de tu partida —
-          puedes ver los pronósticos de todos (en modo solo lectura) y personalizar el reglamento
-          de puntuación. Puedes pertenecer a múltiples partidas al mismo tiempo.
+          ${currentLang==='fr'
+            ? `Créez une partie, choisissez le type de jeu et partagez le <strong>code</strong> ou le <strong>QR</strong> avec vos amis. Vous êtes l'admin de votre partie — vous pouvez voir les pronostics de tous (lecture seule) et personnaliser les points. Vous pouvez rejoindre plusieurs parties en même temps.`
+            : currentLang==='en'
+            ? `Create a game, choose the type and share the <strong>code</strong> or <strong>QR</strong> with friends. You're the admin of your game — you can view everyone's predictions (read-only) and customise the scoring rules. You can belong to multiple games at once.`
+            : `Crea una partida, elige el tipo de juego y comparte el <strong>código</strong> o <strong>QR</strong> con tus amigos. Tú eres el admin — puedes ver los pronósticos de todos (solo lectura) y personalizar los puntos. Puedes pertenecer a múltiples partidas al mismo tiempo.`}
         </div>
       </div>
 
       <div class="card" style="border-color:rgba(139,92,246,0.3)">
         <div class="card-header" style="padding-bottom:0.5rem">
-          <h3 style="color:#a78bfa">👑 Versión Premium</h3>
+          <h3 style="color:#a78bfa">👑 ${t('premiumTitle')}</h3>
         </div>
         <div class="card-body" style="font-size:0.85rem;color:var(--gray-300);line-height:1.6">
           <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.35rem">
-            <li>🤖 Pronóstico sugerido por IA (estadísticas y enfrentamientos históricos)</li>
-            <li>📊 Tabla de clasificación completa (todos los participantes)</li>
-            <li>🎯 Sugerencia de marcador estratégico vs rivales en rondas avanzadas</li>
-            <li>🔍 Búsqueda avanzada de participantes</li>
+            <li>🤖 ${currentLang==='fr'?'Pronostic suggéré par IA':currentLang==='en'?'AI-suggested predictions':'Pronóstico sugerido por IA'}</li>
+            <li>📊 ${currentLang==='fr'?'Tableau complet des participants':currentLang==='en'?'Full participant standings table':'Tabla de clasificación completa'}</li>
+            <li>🎯 ${currentLang==='fr'?'Score stratégique suggéré':currentLang==='en'?'Strategic score suggestions':'Sugerencia de marcador estratégico'}</li>
+            <li>🔍 ${currentLang==='fr'?'Recherche avancée':currentLang==='en'?'Advanced participant search':'Búsqueda avanzada de participantes'}</li>
           </ul>
-          <div style="margin-top:0.6rem;font-size:0.78rem;color:var(--gray-400)">Próximamente disponible.</div>
+          <div style="margin-top:0.6rem;font-size:0.78rem;color:var(--gray-400)">${currentLang==='fr'?'Bientôt disponible.':currentLang==='en'?'Coming soon.':'Próximamente disponible.'}</div>
         </div>
       </div>
     </div>
@@ -1892,8 +1917,14 @@ function renderPartidas(){
   const container=document.getElementById('partidas-content');
   if(!isLoggedIn()){
     container.innerHTML=`<div class="section-header"><h2>🎮 ${t('games')}</h2></div>
-      <div class="empty-state-card"><div class="empty-icon">🔐</div><p>${t('loginToAccess')}</p>
-      <button class="btn btn-primary" onclick="showLoginModal()">🔐 ${t('login')}</button></div>`;
+      <div class="empty-state-card" style="padding:3rem 1.5rem">
+        <div class="empty-icon" style="font-size:3rem;margin-bottom:1rem">🔐</div>
+        <p style="color:var(--gray-300);margin-bottom:1.25rem">${t('noSession')}</p>
+        <div style="display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary btn-lg" onclick="showLoginModal('login')">🔐 ${t('login')}</button>
+          <button class="btn btn-gold btn-lg" onclick="showLoginModal('register')">✨ ${t('register')}</button>
+        </div>
+      </div>`;
     return;
   }
   const myGames    = appData.games.filter(g=>g.isOwner);
@@ -2425,7 +2456,7 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
             <div style="display:flex;flex-direction:column;gap:0.5rem">
               ${[...new Set(dateMatches.map(m=>m.group))].map(grpId=>{
                 const grpStandings=calcGroupStandingsFromPred(grpId,pred);
-                return `<div id="pred-standings-${grpId}">${renderGroupStandingsTable(grpStandings,grpId,'group')}</div>`;
+                const elimB=computeEliminatedTeams(pred,true); return `<div id="pred-standings-${grpId}">${renderGroupStandingsTable(grpStandings,grpId,'group',elimB)}</div>`;
               }).join('')}
             </div>
           </div>
@@ -2470,7 +2501,7 @@ function renderGroupPredictions(predData, readonly=false, gameType='A', jornadaL
               }).join('')}
             </div>
             <div id="pred-standings-${group.id}">
-              ${renderPredGroupStandings(groupStandings,group.id)}
+              ${renderPredGroupStandings(groupStandings,group.id,computeEliminatedTeams(pred,true))}
             </div>
           </div>
         </div>`;
@@ -2589,16 +2620,58 @@ function updateGroupStandingsLive(groupId){
     }
   });
   const standings=calcGroupStandingsFromPred(groupId,tempPred);
+  const game=currentGame();
+  const pred2=game?.predictionsCache?.[currentParticipant]||{groupMatches:{},knockoutMatches:{}};
+  const elimIds=computeEliminatedTeams(pred2,true);
   const el=document.getElementById(`pred-standings-${groupId}`);
-  if(el) el.innerHTML=renderPredGroupStandings(standings,groupId);
+  if(el) el.innerHTML=renderPredGroupStandings(standings,groupId,elimIds);
 }
 
-function renderGroupStandingsTable(standings, groupId, titleKey='group'){
+/**
+ * Computes the set of team IDs eliminated in the group stage.
+ * Eliminated = 4th in any group + 4 worst 3rd-place teams.
+ * Uses real results if available, otherwise predictions.
+ * Returns a Set of team IDs.
+ */
+function computeEliminatedTeams(pred, forcePred=false){
+  const results = getResults();
+  // Get standings for all 12 groups
+  const allStandings = GROUPS.map(g=>{
+    const hasReal = !forcePred && Object.keys(results.groupMatches||{}).some(k=>{
+      const m=GROUP_MATCHES.find(x=>x.id===k); return m&&m.group===g.id;
+    });
+    return {groupId:g.id, standings: hasReal
+      ? calcGroupStandingsFromResults(g.id, results)
+      : calcGroupStandingsFromPred(g.id, pred||{groupMatches:{}})};
+  });
+
+  const eliminated = new Set();
+  const thirds = [];
+
+  allStandings.forEach(({groupId, standings})=>{
+    if(standings.length<1) return;
+    // 4th place is always eliminated
+    if(standings[3]?.pj>0) eliminated.add(standings[3].id);
+    // Collect 3rd places for worst-3rds calculation
+    if(standings[2]?.pj>0) thirds.push({id:standings[2].id, ...standings[2]});
+  });
+
+  // Sort thirds by FIFA criteria (same as getBestThirdPlaces)
+  thirds.sort((a,b)=>
+    b.pts-a.pts || b.gd-a.gd || b.gf-a.gf || b.fp-a.fp || 0
+  );
+  // 4 worst thirds are eliminated (top 8 qualify)
+  thirds.slice(8).forEach(t3=>eliminated.add(t3.id));
+
+  return eliminated;
+}
+
+function renderGroupStandingsTable(standings, groupId, titleKey='group', eliminatedIds=new Set()){
   // Shared renderer for pred standings (Tipo A, Tipo B) and real standings
   const allBlank=standings.every(s=>s.pj===0);
-  const rowColor = i => i<2?'rgba(34,197,94,0.08)':i===2?'rgba(59,130,246,0.08)':'';
-  const numColor = i => i<2?'var(--green-light)':i===2?'#60a5fa':'var(--gray-400)';
-  const ptColor  = i => i<2?'var(--green-light)':i===2?'#60a5fa':'var(--white)';
+  const rowColor = (i,id) => eliminatedIds.has(id)?'rgba(239,68,68,0.07)':i<2?'rgba(34,197,94,0.08)':i===2?'rgba(59,130,246,0.08)':'';
+  const numColor = (i,id) => eliminatedIds.has(id)?'rgba(239,68,68,0.6)':i<2?'var(--green-light)':i===2?'#60a5fa':'var(--gray-400)';
+  const ptColor  = (i,id) => eliminatedIds.has(id)?'rgba(239,68,68,0.7)':i<2?'var(--green-light)':i===2?'#60a5fa':'var(--white)';
   return `<div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:8px;overflow:hidden;font-size:0.75rem">
     <div style="padding:0.35rem 0.6rem;background:rgba(255,255,255,0.05);font-family:'Barlow Condensed',sans-serif;font-size:0.78rem;font-weight:700;letter-spacing:1px;color:var(--gold)">
       📊 ${t(titleKey)} ${groupId}
@@ -2617,9 +2690,12 @@ function renderGroupStandingsTable(standings, groupId, titleKey='group'){
         <th style="padding:0.25rem 0.3rem" title="Puntos">PTS</th>
       </tr></thead>
       <tbody>
-        ${standings.map((s,i)=>`
-          <tr style="background:${rowColor(i)};border-top:1px solid rgba(255,255,255,0.04)">
-            <td style="padding:0.25rem 0.3rem;color:${numColor(i)};font-weight:700">${i+1}</td>
+        ${standings.map((s,i)=>{
+          const isElim=eliminatedIds.has(s.id);
+          return `
+          <tr style="background:${rowColor(i,s.id)};border-top:1px solid rgba(255,255,255,0.04)">
+            <td style="padding:0.25rem 0.3rem;color:${numColor(i,s.id)};font-weight:700">
+              ${isElim?'❌':i+1}</td>
             <td style="padding:0.25rem 0.3rem;display:flex;align-items:center;gap:0.2rem">${flagImg(s.id,'flag-img-sm')}<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52px">${getTeamName(s.id)}</span></td>
             <td style="padding:0.25rem 0.3rem;text-align:center;color:var(--gray-400)">${s.pj}</td>
             <td style="padding:0.25rem 0.3rem;text-align:center;color:var(--gray-400)">${s.w}</td>
@@ -2628,8 +2704,8 @@ function renderGroupStandingsTable(standings, groupId, titleKey='group'){
             <td style="padding:0.25rem 0.3rem;text-align:center;color:var(--gray-400)">${s.gf}</td>
             <td style="padding:0.25rem 0.3rem;text-align:center;color:var(--gray-400)">${s.ga}</td>
             <td style="padding:0.25rem 0.3rem;text-align:center;color:var(--gray-400)">${s.gd>0?'+':''}${s.gd}</td>
-            <td style="padding:0.25rem 0.3rem;text-align:center;font-weight:700;color:${ptColor(i)}">${s.pts}</td>
-          </tr>`).join('')}
+            <td style="padding:0.25rem 0.3rem;text-align:center;font-weight:700;color:${ptColor(i,s.id)}">${s.pts}</td>
+          </tr>`;}).join('')}
       </tbody>
     </table>
     ${allBlank?`<div style="padding:0.35rem 0.6rem;font-size:0.7rem;color:var(--gray-400);text-align:center">${t('enterPredictionsToSeeStandings')}</div>`:''}
@@ -2637,7 +2713,7 @@ function renderGroupStandingsTable(standings, groupId, titleKey='group'){
 }
 
 // Keep old name as alias for pred standings (called by updateGroupStandingsLive)
-function renderPredGroupStandings(standings,groupId){ return renderGroupStandingsTable(standings,groupId,'group'); }
+function renderPredGroupStandings(standings,groupId,eliminatedIds=new Set()){ return renderGroupStandingsTable(standings,groupId,'group',eliminatedIds); }
 
 function renderMatchPredRow(match,pred,result,pts){
   const homeTeam=getTeam(match.home);
@@ -2949,23 +3025,33 @@ function renderR32BracketFromPred(r32Matches, groupPredStandings, slotAssignment
 
     const bothKnown = hId && aId;
 
-    return `<div class="match-row${isThird?' knockout-row':''}" style="margin-bottom:0.35rem;${isThird?'border-left:3px solid rgba(59,130,246,0.5)':'border-left:3px solid rgba(245,158,11,0.3)'}">
-      <span class="match-date" style="font-size:0.68rem;min-width:52px">P${match.mn}</span>
-      <div class="match-teams" style="flex:1;gap:0.4rem">
-        <div class="team-display" style="flex:1;justify-content:flex-end;gap:0.3rem">
-          <span style="font-size:0.82rem;font-weight:${hId?600:400};color:${hId?'var(--white)':'var(--gray-400)'}">${hName}</span>
-          ${hId?flagImg(hId,'flag-img'):''}
-          <span style="font-size:0.62rem;color:var(--gold);font-weight:700;min-width:22px;text-align:center">${hSlot}</span>
-        </div>
-        <span style="color:var(--gray-400);font-size:0.78rem;padding:0 0.2rem">vs</span>
-        <div class="team-display" style="flex:1;gap:0.3rem">
-          <span style="font-size:0.62rem;color:${aSlot.startsWith('3')?'#60a5fa':'var(--gold)'};font-weight:700;min-width:22px;text-align:center">${aSlot}</span>
-          ${aId?flagImg(aId,'flag-img'):''}
-          <span style="font-size:0.82rem;font-weight:${aId?600:400};color:${aId?'var(--white)':'var(--gray-400)'}">${aName}</span>
-        </div>
+    // Color left border: gold for 1sts/2nds vs 1sts/2nds, blue if any 3rd involved
+    const borderColor = isThird ? 'rgba(59,130,246,0.5)' : 'rgba(245,158,11,0.3)';
+    return `<div style="display:flex;align-items:center;gap:0.4rem;padding:0.28rem 0.4rem;
+              border-left:3px solid ${borderColor};border-radius:0 4px 4px 0;
+              background:rgba(255,255,255,0.02);margin-bottom:0.25rem;min-height:36px">
+      <span style="font-size:0.62rem;color:var(--gray-400);min-width:28px;flex-shrink:0">P${match.mn}</span>
+      <!-- Home slot -->
+      <div style="display:flex;align-items:center;gap:0.2rem;flex:1;justify-content:flex-end;overflow:hidden">
+        <span style="font-size:0.78rem;font-weight:600;color:${hId?'var(--white)':'var(--gray-400)'};
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${hName}</span>
+        ${hId?flagImg(hId,'flag-img-sm'):'<span style="width:18px;display:inline-block"></span>'}
+        <span style="font-size:0.6rem;font-weight:700;color:var(--gold);min-width:20px;
+          text-align:center;flex-shrink:0">${hSlot}</span>
       </div>
-      ${bonusBadge}
-      ${!bothKnown?`<span style="font-size:0.65rem;color:var(--gray-400)">⏳ pendiente</span>`:''}
+      <span style="color:var(--gray-400);font-size:0.72rem;flex-shrink:0;padding:0 0.15rem">vs</span>
+      <!-- Away slot -->
+      <div style="display:flex;align-items:center;gap:0.2rem;flex:1;overflow:hidden">
+        <span style="font-size:0.6rem;font-weight:700;color:${aSlot.startsWith('3')?'#60a5fa':'var(--gold)'};
+          min-width:20px;text-align:center;flex-shrink:0">${aSlot}</span>
+        ${aId?flagImg(aId,'flag-img-sm'):'<span style="width:18px;display:inline-block"></span>'}
+        <span style="font-size:0.78rem;font-weight:600;color:${aId?'var(--white)':'var(--gray-400)'};
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${aName}</span>
+      </div>
+      <!-- Bonus / status -->
+      <div style="flex-shrink:0;min-width:28px;text-align:right">
+        ${bonusBadge||(!bothKnown?'<span style="font-size:0.6rem;color:var(--gray-400)">⏳</span>':'')}
+      </div>
     </div>`;
   }).join('');
 
@@ -3241,8 +3327,7 @@ function renderKnockoutPredictions(predData, readonly=false, isGroupsSubmitted=f
 
   function isThirdSlot(slot){ return slot && slot.startsWith('3'); }
 
-  // ── R32 bracket (read-only matchups + bonus badge) ─────────────────
-  html+=renderR32BracketFromPred(ko.roundOf32, groupPredStandings, slotAssignment, thirdsResult, getResults());
+  // R32 matchups already shown at the end of the Group Stage tab — skipped here.
 
   // ── Tipo B Knockout: matchups by jornada (read-only brackets) ────────
   if(gameType==='B'){
@@ -3660,7 +3745,7 @@ function calcGroupStandingsFromResults(groupId,results){
 }
 
 function renderRealGroupStandings(standings,groupId){
-  return renderGroupStandingsTable(standings,groupId,'standings');
+  const elimR=computeEliminatedTeams(null,false); return renderGroupStandingsTable(standings,groupId,'standings',elimR);
 }
 
 function renderKnockoutResultsHtml(results){
