@@ -90,10 +90,11 @@ def init_db():
     );
 
     CREATE TABLE IF NOT EXISTS game_members (
-        game_id          TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-        user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        joined_at        TEXT NOT NULL,
-        groups_submitted INTEGER NOT NULL DEFAULT 0,
+        game_id              TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+        user_id              TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        joined_at            TEXT NOT NULL,
+        groups_submitted     INTEGER NOT NULL DEFAULT 0,
+        knockouts_submitted  INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (game_id, user_id)
     );
 
@@ -106,6 +107,7 @@ def init_db():
         away_score INTEGER,
         home_team  TEXT,
         away_team  TEXT,
+        penalty_winner TEXT,
         saved_at   TEXT NOT NULL,
         PRIMARY KEY (game_id, user_id, match_id)
     );
@@ -117,6 +119,7 @@ def init_db():
         away_score INTEGER NOT NULL,
         home_team  TEXT,
         away_team  TEXT,
+        penalty_winner TEXT,
         updated_at TEXT NOT NULL
     );
     """)
@@ -366,7 +369,7 @@ def get_predictions(game_id, user_id):
         return err('No eres miembro de esta partida', 403)
 
     member = db.execute(
-        "SELECT groups_submitted FROM game_members WHERE game_id=? AND user_id=?",
+        "SELECT groups_submitted, knockouts_submitted FROM game_members WHERE game_id=? AND user_id=?",
         (game_id, user_id)
     ).fetchone()
     if not member: return err('Participante no encontrado en la partida', 404)
@@ -375,27 +378,38 @@ def get_predictions(game_id, user_id):
     if not game: return err('Partida no encontrada', 404)
 
     rows = db.execute(
-        "SELECT match_id,match_type,home_score,away_score,home_team,away_team "
+        "SELECT match_id,match_type,home_score,away_score,home_team,away_team,penalty_winner "
         "FROM predictions WHERE game_id=? AND user_id=?",
         (game_id, user_id)
     ).fetchall()
 
     gm, km = {}, {}
+    
     for r in rows:
-        e = {'home': r['home_score'], 'away': r['away_score']}
+        r = dict(r)
+        e = {
+    'home': r.get('home_score'),
+    'away': r.get('away_score'),
+    'homeTeam': r.get('home_team') or '',
+    'awayTeam': r.get('away_team') or '',
+    'penaltyWinner': r.get('penalty_winner') or ''
+    }
+
+
         if r['match_type'] == 'group':
             gm[r['match_id']] = e
         else:
             e['homeTeam'] = r['home_team'] or ''
             e['awayTeam'] = r['away_team'] or ''
             km[r['match_id']] = e
-
+    member = dict(member)
     return ok({
-        'groupMatches':    gm,
-        'knockoutMatches': km,
-        'groupsSubmitted': bool(member['groups_submitted']),
-        'gameType':        game['game_type'],
-        'canEdit':         viewer_id == user_id,
+        'groupMatches':      gm,
+        'knockoutMatches':   km,
+        'groupsSubmitted':   bool(member['groups_submitted']),
+        'knockoutsSubmitted':bool(member.get('knockouts_submitted', False)),
+        'gameType':          game['game_type'],
+        'canEdit':           viewer_id == user_id,
     })
 
 
@@ -415,10 +429,13 @@ def save_predictions(game_id):
     db     = get_db()
 
     member = db.execute(
-        "SELECT groups_submitted FROM game_members WHERE game_id=? AND user_id=?",
-        (game_id, uid)
+    "SELECT groups_submitted, knockouts_submitted FROM game_members WHERE game_id=? AND user_id=?",
+    (game_id, uid)
     ).fetchone()
+
     if not member: return err('No eres miembro de esta partida', 403)
+
+    member = dict(member)
 
     game = db.execute("SELECT game_type FROM games WHERE id=?", (game_id,)).fetchone()
     if not game: return err('Partida no encontrada', 404)
@@ -426,7 +443,8 @@ def save_predictions(game_id):
     body          = request.get_json(force=True) or {}
     gm            = body.get('groupMatches',    {}) or {}
     km            = body.get('knockoutMatches', {}) or {}
-    submit_groups = bool(body.get('submitGroups', False))
+    submit_groups    = bool(body.get('submitGroups',    False))
+    submit_knockouts = bool(body.get('submitKnockouts', False))
     match_dates   = body.get('matchDates', {}) or {}
     ts            = now_iso()
 
@@ -461,23 +479,28 @@ def save_predictions(game_id):
             mdate = match_dates.get(match_id)
             if mdate and is_jornada_locked(mdate):
                 skipped.append(match_id); continue
+        pw = scores.get('penaltyWinner', '') or ''
         db.execute("""
-            INSERT INTO predictions(game_id,user_id,match_id,match_type,home_score,away_score,home_team,away_team,saved_at)
-            VALUES(?,?,?,?,?,?,?,?,?)
+            INSERT INTO predictions(game_id,user_id,match_id,match_type,home_score,away_score,home_team,away_team,penalty_winner,saved_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(game_id,user_id,match_id)
             DO UPDATE SET home_score=excluded.home_score,away_score=excluded.away_score,
-                home_team=excluded.home_team,away_team=excluded.away_team,saved_at=excluded.saved_at
+                home_team=excluded.home_team,away_team=excluded.away_team,
+                penalty_winner=excluded.penalty_winner,saved_at=excluded.saved_at
         """, (game_id, uid, match_id, 'knockout',
               int(h) if h not in (None,'') else None,
               int(a) if a not in (None,'') else None,
-              ht, at, ts))
+              ht, at, pw, ts))
 
     if submit_groups and game['game_type'] == 'A':
         db.execute("UPDATE game_members SET groups_submitted=1 WHERE game_id=? AND user_id=?",
                    (game_id, uid))
+    if submit_knockouts:
+        db.execute("UPDATE game_members SET knockouts_submitted=1 WHERE game_id=? AND user_id=?",
+                   (game_id, uid))
 
     db.commit()
-    return ok({'skipped': skipped, 'groupsSubmitted': submit_groups or bool(member['groups_submitted'])})
+    return ok({'skipped': skipped, 'groupsSubmitted': submit_groups or bool(member['groups_submitted']), 'knockoutsSubmitted': submit_knockouts or bool(member['knockouts_submitted'])})
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -488,42 +511,68 @@ def save_predictions(game_id):
 def get_results():
     db   = get_db()
     rows = db.execute(
-        "SELECT match_id,match_type,home_score,away_score,home_team,away_team FROM results"
+        "SELECT match_id,match_type,home_score,away_score,home_team,away_team,penalty_winner FROM results"
     ).fetchall()
+    # KO match IDs — detect by prefix regardless of match_type stored in DB
+    KO_IDS = {'3P', 'FIN'}
+    KO_PREFIXES = ('R32_', 'QF', 'SF')
+    def is_ko(match_id, match_type):
+        if match_type == 'knockout':
+            return True
+        if match_id in KO_IDS:
+            return True
+        return any(match_id.startswith(p) for p in KO_PREFIXES)
     gm, km = {}, {}
     for r in rows:
         e = {'home': r['home_score'], 'away': r['away_score']}
-        if r['match_type'] == 'group':
-            gm[r['match_id']] = e
-        else:
+        if is_ko(r['match_id'], r['match_type']):
             e['homeTeam'] = r['home_team'] or ''
             e['awayTeam'] = r['away_team'] or ''
+            e['penaltyWinner'] = r['penalty_winner'] or ''
             km[r['match_id']] = e
+        else:
+            gm[r['match_id']] = e
     return ok({'groupMatches': gm, 'knockoutMatches': km})
 
 
 @app.route('/api/results', methods=['POST'])
 def save_results():
-    if not verify_admin(): return err('No autorizado', 403)
+    if not verify_admin():
+        return err('No autorizado', 403)
+
     body    = request.get_json(force=True) or {}
     matches = body.get('matches', []) or []
     db      = get_db()
+
     for m in matches:
-        mid  = m.get('matchId');  mtyp = m.get('matchType','group')
-        h    = m.get('home');     a    = m.get('away')
-        ht   = m.get('homeTeam','') or ''; at = m.get('awayTeam','') or ''
-        if not mid or h is None or a is None: continue
+        mid  = m.get('matchId')
+        mtyp = m.get('matchType', 'group')
+        h    = m.get('home')
+        a    = m.get('away')
+        ht   = m.get('homeTeam', '') or ''
+        at   = m.get('awayTeam', '') or ''
+        pw   = m.get('penaltyWinner', '') or ''
+
+        if not mid or h is None or a is None:
+            continue
+
         db.execute("""
-            INSERT INTO results(match_id,match_type,home_score,away_score,home_team,away_team,updated_at)
-            VALUES(?,?,?,?,?,?,?)
+            INSERT INTO results(match_id,match_type,home_score,away_score,home_team,away_team,penalty_winner,updated_at)
+            VALUES(?,?,?,?,?,?,?,?)
             ON CONFLICT(match_id) DO UPDATE SET
-                home_score=excluded.home_score,away_score=excluded.away_score,
-                home_team=excluded.home_team,away_team=excluded.away_team,updated_at=excluded.updated_at
-        """, (mid, mtyp, int(h), int(a), ht, at, now_iso()))
+                match_type=excluded.match_type,
+                home_score=excluded.home_score,
+                away_score=excluded.away_score,
+                home_team=excluded.home_team,
+                away_team=excluded.away_team,
+                penalty_winner=excluded.penalty_winner,
+                updated_at=excluded.updated_at
+        """, (mid, mtyp, int(h), int(a), ht, at, pw, now_iso()))
+
     if matches:
         db.commit()
-    return ok({'saved': len([m for m in matches if m.get('matchId')])})
 
+    return ok({'saved': len([m for m in matches if m.get('matchId')])})
 
 @app.route('/api/results', methods=['DELETE'])
 def delete_results():
@@ -583,4 +632,4 @@ if __name__ == '__main__':
     init_db()
     print(f"✅  BD lista : {DB_PATH}")
     print(f"🌐  Servidor : http://localhost:5000")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000, use_reloader=False)
